@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 amethyst = "0.13.0"
 log = { version = "0.4.8", features = ["serde"] }
+anyhow = "*"
 
 [features]
 default = ["vulkan"]

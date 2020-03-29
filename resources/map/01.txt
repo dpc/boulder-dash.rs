@@ -2,8 +2,8 @@
 # oo   oooooooooooooooooooo#
 # .oo ..ooooooooooooooooooo#
 # ...   oooooooooooosoooooo#
-# ...    .                 #
-# ...          ...o        #
+# ...    .           o     #
+# ...          ...o  o     #
 #               ...      o #
 #  .                     . #
 #                          #

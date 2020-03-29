@@ -20,13 +20,13 @@ use std::time::Duration;
 #[derive(Default)]
 pub struct GridState {
     pub last_tick: Option<Duration>,
-    pub tiles_current: TileTypeGrid,
-    pub tiles_old: TileTypeGrid,
+    pub tiles_prev: TileTypeGrid,
+    pub tiles: TileTypeGrid,
     pub sprites: Option<Handle<SpriteSheet>>,
     pub player_pos: GridPos,
 }
 
-#[derive(Default)]
+#[derive(Default, Copy, Clone, Debug)]
 pub struct GridPos {
     pub x: usize,
     pub y: usize,
@@ -35,6 +35,13 @@ pub struct GridPos {
 impl GridPos {
     pub fn new(x: usize, y: usize) -> Self {
         Self { x, y }
+    }
+
+    pub fn down(self) -> Self {
+        Self {
+            x: self.x,
+            y: self.y - 1,
+        }
     }
 }
 
@@ -59,7 +66,7 @@ impl<'s> System<'s> for GridObjectSystem {
     ) {
         if grid_map_state
             .last_tick
-            .map(|last| time.absolute_time() - last < Duration::from_millis(5000))
+            .map(|last| time.absolute_time() - last < Duration::from_millis(1000))
             .unwrap_or(false)
         {
             return;
@@ -67,46 +74,42 @@ impl<'s> System<'s> for GridObjectSystem {
             grid_map_state.last_tick = Some(time.absolute_time());
         }
 
-        for (grid_object, transform) in (&mut grid_objects, &mut transforms).join() {
-            let x = &mut grid_object.x;
-            let y = &mut grid_object.y;
+        for (pos, transform) in (&mut grid_objects, &mut transforms).join() {
             let GridState {
-                ref tiles_current,
-                ref mut tiles_old,
+                ref tiles_prev,
+                ref mut tiles,
                 ..
             } = *grid_map_state;
-            // let tiles = &grid_map_state.tiles_current;
-            // let new_tiles = &mut grid_map_state.tiles_old;
 
-            /*
-            let type_ = tiles_current.get(*x, *y);
+            let type_ = tiles_prev.get(*pos);
 
             if type_.is_falling() {
-                let type_below = tiles_current.get(*x, *y - 1);
+                let pos_below = pos.down();
+                let type_below = tiles_prev.get(pos_below);
                 if type_below.is_empty() {
-                    *tiles_old.get_mut(*x, *y) = type_below;
-                    *tiles_old.get_mut(*x, *y - 1) = type_;
-                    *y = *y - 1;
+                    assert!(tiles_prev.get(pos_below).is_empty());
+                    assert!(tiles_prev.get(*pos) == type_);
+                    *tiles.get_mut(*pos) = type_below;
+                    *tiles.get_mut(pos_below) = type_;
+                    *pos = pos_below;
                 }
             }
-            */
 
-            transform.set_translation_y(*y as f32 * 32.);
-            transform.set_translation_x(*x as f32 * 32.);
+            transform.set_translation_y(pos.y as f32 * 32.);
+            transform.set_translation_x(pos.x as f32 * 32.);
         }
-        /*
         let GridState {
-            ref mut tiles_current,
-            ref mut tiles_old,
+            ref mut tiles_prev,
+            ref mut tiles,
             ..
         } = *grid_map_state;
-        std::mem::swap(tiles_current, tiles_old);
-        */
+        // std::mem::swap(tiles_prev, tiles);
+        tiles_prev.tiles[..].copy_from_slice(&tiles.tiles);
     }
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TileType {
     Empty,
     Player,
@@ -151,15 +154,15 @@ pub struct TileTypeGrid {
 }
 
 impl TileTypeGrid {
-    fn get(&self, x: usize, y: usize) -> TileType {
-        *self.get_ref(x, y)
+    fn get(&self, pos: GridPos) -> TileType {
+        *self.get_ref(pos)
     }
 
-    fn get_ref(&self, x: usize, y: usize) -> &TileType {
-        &self.tiles[x + (self.height - y - 1) * self.width]
+    fn get_ref(&self, pos: GridPos) -> &TileType {
+        &self.tiles[pos.x + (self.height - pos.y - 1) * self.width]
     }
-    fn get_mut(&mut self, x: usize, y: usize) -> &mut TileType {
-        &mut self.tiles[x + (self.height - y - 1) * self.width]
+    fn get_mut(&mut self, pos: GridPos) -> &mut TileType {
+        &mut self.tiles[pos.x + (self.height - pos.y - 1) * self.width]
     }
 }
 
@@ -217,15 +220,15 @@ pub fn init(world: &mut World, sprites: Handle<SpriteSheet>) {
 
     let state = GridState {
         last_tick: Default::default(),
-        tiles_current: grid.clone(),
-        tiles_old: grid.clone(),
+        tiles_prev: grid.clone(),
+        tiles: grid.clone(),
         sprites: Some(sprites.clone()),
         player_pos: start,
     };
 
     for y in 0..grid.height {
         for x in 0..grid.width {
-            let t = grid.get(x, y);
+            let t = grid.get(GridPos { x, y });
             if let Some(sprite_number) = t.to_sprite_number() {
                 let sprite_render = SpriteRender {
                     sprite_sheet: sprites.clone(),

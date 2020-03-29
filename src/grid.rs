@@ -78,6 +78,7 @@ impl<'s> System<'s> for GridObjectSystem {
             // let tiles = &grid_map_state.tiles_current;
             // let new_tiles = &mut grid_map_state.tiles_old;
 
+            /*
             let type_ = tiles_current.get(*x, *y);
 
             if type_.is_falling() {
@@ -88,16 +89,19 @@ impl<'s> System<'s> for GridObjectSystem {
                     *y = *y - 1;
                 }
             }
+            */
 
             transform.set_translation_y(*y as f32 * 32.);
-            // transform.set_translation_x(*x as f32 * 32.);
+            transform.set_translation_x(*x as f32 * 32.);
         }
+        /*
         let GridState {
             ref mut tiles_current,
             ref mut tiles_old,
             ..
         } = *grid_map_state;
         std::mem::swap(tiles_current, tiles_old);
+        */
     }
 }
 
@@ -148,9 +152,12 @@ pub struct TileTypeGrid {
 
 impl TileTypeGrid {
     fn get(&self, x: usize, y: usize) -> TileType {
-        self.tiles[x + (self.height - y - 1) * self.width]
+        *self.get_ref(x, y)
     }
 
+    fn get_ref(&self, x: usize, y: usize) -> &TileType {
+        &self.tiles[x + (self.height - y - 1) * self.width]
+    }
     fn get_mut(&mut self, x: usize, y: usize) -> &mut TileType {
         &mut self.tiles[x + (self.height - y - 1) * self.width]
     }

@@ -11,6 +11,7 @@ use amethyst::{
 };
 
 mod grid;
+mod input;
 mod state;
 
 fn main() -> amethyst::Result<()> {
@@ -35,6 +36,7 @@ fn main() -> amethyst::Result<()> {
                 )
                 .with_plugin(RenderFlat2D::default()),
         )?
+        .with(input::InputSystem, "own_input_system", &[])
         .with(
             grid::GridObjectSystem,
             "grid_object_system",

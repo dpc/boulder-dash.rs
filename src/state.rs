@@ -8,7 +8,7 @@ use amethyst::{
     window::ScreenDimensions,
 };
 
-use crate::grid;
+use crate::{grid, input};
 use log::info;
 
 pub struct MyState;
@@ -30,7 +30,8 @@ impl SimpleState for MyState {
 
         // Load our sprites and display them
         let sprites = load_sprites(world);
-        grid::init(world, sprites);
+        grid::GridObjectSystem::init(world, sprites);
+        input::InputSystem::init(world);
     }
 
     fn handle_event(

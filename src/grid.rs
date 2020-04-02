@@ -11,7 +11,7 @@ use amethyst::{
     prelude::*,
     renderer::{SpriteRender, SpriteSheet},
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, format_err, Result};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -41,6 +41,7 @@ pub struct GridObjectState {
     pub pos: GridPos,
     pub moved: bool,
 }
+
 impl GridObjectState {
     pub fn new(x: usize, y: usize) -> Self {
         Self {
@@ -150,12 +151,12 @@ impl<'s> System<'s> for GridObjectSystem {
     ) {
         let do_grid_tick = grid_map_state
             .last_grid_tick
-            .map(|last| Duration::from_millis(300) < time.absolute_time() - last)
+            .map(|last| Duration::from_millis(125) < time.absolute_time() - last)
             .unwrap_or(true);
 
         let do_player_tick = grid_map_state
             .last_player_tick
-            .map(|last| Duration::from_millis(150) < time.absolute_time() - last)
+            .map(|last| Duration::from_millis(125) < time.absolute_time() - last)
             .unwrap_or(true);
 
         if do_grid_tick {
@@ -285,7 +286,7 @@ impl<'s> System<'s> for GridObjectSystem {
                 ..
             } = *grid_map_state;
             // std::mem::swap(tiles_prev, tiles);
-            tiles_prev.tiles[..].copy_from_slice(&tiles.tiles);
+            tiles_prev.copy_from(&tiles);
         }
     }
 }
@@ -300,6 +301,12 @@ pub enum TileType {
     Wall,
     Diamond,
     Steel,
+}
+
+impl Default for TileType {
+    fn default() -> Self {
+        TileType::Empty
+    }
 }
 
 impl TileType {
@@ -351,29 +358,57 @@ impl TileType {
     }
 }
 
+pub type TileTypeGrid = Grid<TileType>;
+
 #[derive(Default, Clone)]
-pub struct TileTypeGrid {
+pub struct Grid<T> {
     height: usize,
     width: usize,
-    tiles: Vec<TileType>,
+    vals: Vec<T>,
 }
 
-impl TileTypeGrid {
-    fn get(&self, pos: GridPos) -> TileType {
-        *self.get_ref(pos)
+impl<T> Grid<T>
+where
+    T: Clone + Default,
+{
+    fn new(width: usize, height: usize) -> Self {
+        Self {
+            width,
+            height,
+            vals: vec![Default::default(); width * height],
+        }
     }
-
     fn swap(&mut self, p1: GridPos, p2: GridPos) {
         let tmp = self.get(p1);
         *self.get_mut(p1) = self.get(p2);
         *self.get_mut(p2) = tmp;
     }
 
-    fn get_ref(&self, pos: GridPos) -> &TileType {
-        &self.tiles[pos.x + (self.height - pos.y - 1) * self.width]
+    fn get(&self, pos: GridPos) -> T {
+        self.get_ref(pos).clone()
     }
-    fn get_mut(&mut self, pos: GridPos) -> &mut TileType {
-        &mut self.tiles[pos.x + (self.height - pos.y - 1) * self.width]
+
+    fn set(&mut self, pos: GridPos, v: T) {
+        *self.get_mut(pos) = v;
+    }
+
+    fn get_ref(&self, pos: GridPos) -> &T {
+        &self.vals[pos.x + pos.y * self.width]
+    }
+    fn get_mut(&mut self, pos: GridPos) -> &mut T {
+        &mut self.vals[pos.x + pos.y * self.width]
+    }
+}
+
+impl<T> Grid<T>
+where
+    T: Copy,
+{
+    fn copy_from(&mut self, other: &Self) {
+        debug_assert_eq!(self.width, other.width);
+        debug_assert_eq!(self.height, other.height);
+
+        self.vals[..].copy_from_slice(&other.vals);
     }
 }
 
@@ -383,47 +418,47 @@ struct LoadMapData {
 }
 
 fn load_map(path: PathBuf) -> Result<LoadMapData> {
-    let mut width = None;
-    let mut height = 0;
     let mut start = None;
-    let mut tiles = vec![];
 
     let file = File::open(path)?;
     let reader = BufReader::new(file);
+    let lines: Result<Vec<String>> = reader.lines().map(|e| e.map_err(|e| e.into())).collect();
+    let lines = lines?;
+    let width = lines[0].len();
+    let height = lines.len();
 
-    for (y, line) in reader.lines().enumerate() {
-        let line = line?;
-        if let Some(width) = width {
-            if width != line.len() {
-                bail!("Lines not equal len");
-            }
-        } else {
-            width = Some(line.len());
+    let mut grid = TileTypeGrid::new(width, height);
+
+    for (y, line) in lines.iter().rev().enumerate() {
+        if width != line.len() {
+            bail!("Lines not equal len");
         }
-        height = y + 1;
 
         for (x, ch) in line.chars().enumerate() {
-            tiles.push(match ch {
-                's' => {
-                    start = Some(GridPos::new(x, y));
-                    TileType::Player
-                }
-                '#' => TileType::Steel,
-                '%' => TileType::Wall,
-                '.' => TileType::Dirt,
-                'o' => TileType::Rock,
-                '*' => TileType::Diamond,
-                _ => TileType::Empty,
-            });
+            let pos = GridPos::new(x, y);
+            grid.set(
+                pos,
+                match ch {
+                    's' => {
+                        if start.is_some() {
+                            bail!("Multiple starting positions found");
+                        }
+                        start = Some(pos);
+                        TileType::Player
+                    }
+                    '#' => TileType::Steel,
+                    '%' => TileType::Wall,
+                    '.' => TileType::Dirt,
+                    'o' => TileType::Rock,
+                    '*' => TileType::Diamond,
+                    _ => TileType::Empty,
+                },
+            );
         }
     }
 
     Ok(LoadMapData {
-        grid: TileTypeGrid {
-            width: width.unwrap(),
-            height,
-            tiles,
-        },
-        start: start.unwrap(),
+        grid,
+        start: start.ok_or_else(|| format_err!("No start position found"))?,
     })
 }

@@ -6,7 +6,7 @@ use amethyst::{
     derive::SystemDesc,
     ecs::{
         prelude::{Component, DenseVecStorage},
-        Join, Read, System, SystemData, World, Write, WriteStorage,
+        Entity, Join, Read, System, SystemData, World, Write, WriteStorage,
     },
     prelude::*,
     renderer::{SpriteRender, SpriteSheet},
@@ -22,10 +22,10 @@ use crate::input::{self, Direction};
 #[derive(Default)]
 pub struct GridState {
     pub last_grid_tick: Option<Duration>,
-    pub last_player_tick: Option<Duration>,
 
     pub tiles_prev: TileTypeGrid,
     pub tiles: TileTypeGrid,
+    pub entities: Grid<Option<Entity>>,
     pub sprites: Option<Handle<SpriteSheet>>,
     pub player_pos: GridPos,
 }
@@ -97,46 +97,52 @@ impl Component for GridObjectState {
 }
 
 #[derive(SystemDesc)]
-pub struct GridObjectSystem;
+pub struct GridRulesSystem;
 
-impl GridObjectSystem {
+impl GridRulesSystem {
     pub fn init(world: &mut World, sprites: Handle<SpriteSheet>) {
         let LoadMapData { grid, start } = load_map("./resources/map/01.txt".into()).unwrap();
-
-        let state = GridState {
-            last_grid_tick: Default::default(),
-            last_player_tick: Default::default(),
-            tiles_prev: grid.clone(),
-            tiles: grid.clone(),
-            sprites: Some(sprites.clone()),
-            player_pos: start,
-        };
+        let mut entities = Grid::new(grid.width, grid.height);
 
         for y in 0..grid.height {
             for x in 0..grid.width {
-                let t = grid.get(GridPos { x, y });
+                let pos = GridPos { x, y };
+                let t = grid.get(pos);
                 if let Some(sprite_number) = t.to_sprite_number() {
                     let sprite_render = SpriteRender {
                         sprite_sheet: sprites.clone(),
                         sprite_number,
                     };
 
-                    world
-                        .create_entity()
-                        .with(sprite_render)
-                        .with(GridObjectState::new(x, y))
-                        .with(Transform::default())
-                        .build();
+                    entities.set(
+                        pos,
+                        Some(
+                            world
+                                .create_entity()
+                                .with(sprite_render)
+                                .with(GridObjectState::new(x, y))
+                                .with(Transform::default())
+                                .build(),
+                        ),
+                    );
                 }
             }
         }
 
+        let state = GridState {
+            last_grid_tick: Default::default(),
+            entities,
+            tiles_prev: grid.clone(),
+            tiles: grid.clone(),
+            sprites: Some(sprites.clone()),
+            player_pos: start,
+        };
         world.register::<grid::GridObjectState>();
         world.insert(state);
     }
 }
 
-impl<'s> System<'s> for GridObjectSystem {
+impl<'s> System<'s> for GridRulesSystem {
     type SystemData = (
         WriteStorage<'s, Transform>,
         WriteStorage<'s, grid::GridObjectState>,
@@ -154,140 +160,131 @@ impl<'s> System<'s> for GridObjectSystem {
             .map(|last| Duration::from_millis(125) < time.absolute_time() - last)
             .unwrap_or(true);
 
-        let do_player_tick = grid_map_state
-            .last_player_tick
-            .map(|last| Duration::from_millis(125) < time.absolute_time() - last)
-            .unwrap_or(true);
-
         if do_grid_tick {
             grid_map_state.last_grid_tick = Some(time.absolute_time());
-        }
-        if do_player_tick {
-            grid_map_state.last_player_tick = Some(time.absolute_time());
-        }
-
-        if do_grid_tick {
-            // objects falling straight down
-            for mut object in (&mut grid_objects).join() {
-                let GridState {
-                    ref tiles_prev,
-                    ref mut tiles,
-                    ..
-                } = *grid_map_state;
-
-                let type_ = tiles.get(object.pos);
-
-                if !type_.can_fall() {
-                    continue;
-                }
-
-                let pos_below = object.pos.down();
-                let type_below = tiles.get(pos_below);
-                let type_below_prev = tiles_prev.get(pos_below);
-                if type_below.is_empty() && type_below_prev.is_empty() {
-                    tiles.swap(object.pos, pos_below);
-                    // *tiles.get_mut(*pos) = type_below;
-                    // *tiles.get_mut(pos_below) = type_;
-                    object.pos = pos_below;
-                    object.moved = true;
-                }
-            }
-
-            // objects rolling to sides
-            for object in (&mut grid_objects).join() {
-                if object.moved {
-                    continue;
-                }
-
-                let GridState {
-                    ref tiles_prev,
-                    ref mut tiles,
-                    ..
-                } = *grid_map_state;
-
-                let type_ = tiles.get(object.pos);
-
-                if !type_.can_fall() {
-                    continue;
-                }
-
-                let pos_below = object.pos.down();
-
-                let type_below = tiles.get(pos_below);
-                if !type_below.can_roll_on_top() {
-                    continue;
-                }
-
-                let pos_left = object.pos.left();
-                let pos_left_down = pos_left.down();
-                let pos_right = object.pos.right();
-                let pos_right_down = pos_right.down();
-                let left_free = tiles.get(pos_left).is_empty()
-                    && tiles_prev.get(pos_left).is_empty()
-                    && tiles.get(pos_left_down).is_empty()
-                    && tiles_prev.get(pos_left_down).is_empty();
-                let right_free = tiles.get(pos_right).is_empty()
-                    && tiles_prev.get(pos_right).is_empty()
-                    && tiles.get(pos_right_down).is_empty()
-                    && tiles_prev.get(pos_right_down).is_empty();
-
-                if let Some(move_pos) = match (left_free, right_free) {
-                    (true, true) => Some(pos_left), // TODO: randomize?
-                    (true, false) => Some(pos_left),
-                    (false, true) => Some(pos_right),
-                    (false, false) => None,
-                } {
-                    tiles.swap(object.pos, move_pos);
-                    object.pos = move_pos;
-                    object.moved = true;
-                }
-            }
+        } else {
+            return;
         }
 
-        if do_player_tick {
-            for object in (&mut grid_objects).join() {
-                if object.moved {
-                    continue;
-                }
-
-                let type_ = grid_map_state.tiles.get(object.pos);
-
-                if !type_.is_player() {
-                    continue;
-                }
-
-                if let Some(action) = input_state.pop_action() {
-                    let dst_pos = object.pos.direction(action.direction);
-                    let dst_type = grid_map_state.tiles.get(dst_pos);
-                    if !dst_type.is_empty() {
-                        // break, as there is only one player
-                        break;
-                    }
-                    grid_map_state.tiles.swap(object.pos, dst_pos);
-                    object.pos = dst_pos;
-                    object.moved = true;
-                    grid_map_state.player_pos = dst_pos;
-                }
-                break;
-            }
-        }
-
-        if do_grid_tick || do_player_tick {
-            for (object, transform) in (&mut grid_objects, &mut transforms).join() {
-                object.moved = false;
-                transform.set_translation_y(object.pos.y as f32 * 32.);
-                transform.set_translation_x(object.pos.x as f32 * 32.);
-            }
-        }
-        if do_grid_tick {
+        // objects falling straight down
+        for mut object in (&mut grid_objects).join() {
             let GridState {
-                ref mut tiles_prev,
+                ref tiles_prev,
                 ref mut tiles,
+                ref mut entities,
                 ..
             } = *grid_map_state;
-            // std::mem::swap(tiles_prev, tiles);
-            tiles_prev.copy_from(&tiles);
+
+            let type_ = tiles.get(object.pos);
+
+            if !type_.can_fall() {
+                continue;
+            }
+
+            let pos_below = object.pos.down();
+            let type_below = tiles.get(pos_below);
+            let type_below_prev = tiles_prev.get(pos_below);
+            if type_below.is_empty() && type_below_prev.is_empty() {
+                tiles.swap(object.pos, pos_below);
+                entities.swap(object.pos, pos_below);
+                // *tiles.get_mut(*pos) = type_below;
+                // *tiles.get_mut(pos_below) = type_;
+                object.pos = pos_below;
+                object.moved = true;
+            }
         }
+
+        // objects rolling to sides
+        for object in (&mut grid_objects).join() {
+            if object.moved {
+                continue;
+            }
+
+            let GridState {
+                ref tiles_prev,
+                ref mut tiles,
+                ref mut entities,
+                ..
+            } = *grid_map_state;
+
+            let type_ = tiles.get(object.pos);
+
+            if !type_.can_fall() {
+                continue;
+            }
+
+            let pos_below = object.pos.down();
+
+            let type_below = tiles.get(pos_below);
+            if !type_below.can_roll_on_top() {
+                continue;
+            }
+
+            let pos_left = object.pos.left();
+            let pos_left_down = pos_left.down();
+            let pos_right = object.pos.right();
+            let pos_right_down = pos_right.down();
+            let left_free = tiles.get(pos_left).is_empty()
+                && tiles_prev.get(pos_left).is_empty()
+                && tiles.get(pos_left_down).is_empty()
+                && tiles_prev.get(pos_left_down).is_empty();
+            let right_free = tiles.get(pos_right).is_empty()
+                && tiles_prev.get(pos_right).is_empty()
+                && tiles.get(pos_right_down).is_empty()
+                && tiles_prev.get(pos_right_down).is_empty();
+
+            if let Some(move_pos) = match (left_free, right_free) {
+                (true, true) => Some(pos_left), // TODO: randomize?
+                (true, false) => Some(pos_left),
+                (false, true) => Some(pos_right),
+                (false, false) => None,
+            } {
+                tiles.swap(object.pos, move_pos);
+                entities.swap(object.pos, move_pos);
+                object.pos = move_pos;
+                object.moved = true;
+            }
+        }
+
+        let player_pos = grid_map_state.player_pos;
+        let player_entity = grid_map_state
+            .entities
+            .get(player_pos)
+            .expect("player entity there");
+
+        let player = grid_objects
+            .get_mut(player_entity)
+            .expect("player by entity there");
+
+        debug_assert!(grid_map_state.tiles.get(player_pos).is_player());
+
+        if let Some(action) = input_state.pop_action() {
+            let dst_pos = player_pos.direction(action.direction);
+            let dst_type = grid_map_state.tiles.get(dst_pos);
+            if dst_type.is_empty() {
+                grid_map_state.tiles.swap(player_pos, dst_pos);
+                grid_map_state.entities.swap(player_pos, dst_pos);
+                player.pos = dst_pos;
+                player.moved = true;
+                grid_map_state.player_pos = dst_pos;
+            }
+        }
+
+        for (object, transform) in (&mut grid_objects, &mut transforms).join() {
+            if !object.moved {
+                continue;
+            }
+
+            object.moved = false;
+            transform.set_translation_y(object.pos.y as f32 * 32.);
+            transform.set_translation_x(object.pos.x as f32 * 32.);
+        }
+        let GridState {
+            ref mut tiles_prev,
+            ref mut tiles,
+            ..
+        } = *grid_map_state;
+        tiles_prev.copy_from(&tiles);
     }
 }
 

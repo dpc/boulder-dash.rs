@@ -30,7 +30,7 @@ impl SimpleState for MyState {
 
         // Load our sprites and display them
         let sprites = load_sprites(world);
-        grid::GridObjectSystem::init(world, sprites);
+        grid::GridRulesSystem::init(world, sprites);
         input::InputSystem::init(world);
     }
 

@@ -1,6 +1,7 @@
 use crate::grid;
 use amethyst::{
     assets::Handle,
+    core::math::Vector3,
     core::timing::Time,
     core::{SystemDesc, Transform},
     derive::SystemDesc,
@@ -34,6 +35,12 @@ pub struct GridState {
 pub struct GridPos {
     pub x: usize,
     pub y: usize,
+}
+
+impl GridPos {
+    fn to_translation(self) -> Vector3<f32> {
+        Vector3::new(self.x as f32 * 32., self.y as f32 * 32., 0.)
+    }
 }
 
 #[derive(Default, Copy, Clone, Debug)]
@@ -114,17 +121,16 @@ impl GridRulesSystem {
                         sprite_number,
                     };
 
-                    entities.set(
-                        pos,
-                        Some(
-                            world
-                                .create_entity()
-                                .with(sprite_render)
-                                .with(GridObjectState::new(x, y))
-                                .with(Transform::default())
-                                .build(),
-                        ),
-                    );
+                    let mut transform = Transform::default();
+                    transform.set_translation(pos.to_translation());
+                    let entity = world
+                        .create_entity()
+                        .with(sprite_render)
+                        .with(GridObjectState::new(x, y))
+                        .with(transform)
+                        .build();
+
+                    entities.set(pos, Some(entity));
                 }
             }
         }
@@ -276,8 +282,7 @@ impl<'s> System<'s> for GridRulesSystem {
             }
 
             object.moved = false;
-            transform.set_translation_y(object.pos.y as f32 * 32.);
-            transform.set_translation_x(object.pos.x as f32 * 32.);
+            transform.set_translation(object.pos.to_translation());
         }
         let GridState {
             ref mut tiles_prev,

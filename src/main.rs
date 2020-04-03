@@ -38,7 +38,7 @@ fn main() -> amethyst::Result<()> {
         )?
         .with(input::InputSystem, "own_input_system", &[])
         .with(
-            grid::GridObjectSystem,
+            grid::GridRulesSystem,
             "grid_object_system",
             &["input_system"],
         );

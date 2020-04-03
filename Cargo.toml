@@ -15,3 +15,6 @@ empty = ["amethyst/empty"]
 metal = ["amethyst/metal"]
 vulkan = ["amethyst/vulkan"]
 nightly = ["amethyst/nightly"]
+
+[profile.dev]
+opt-level = 1

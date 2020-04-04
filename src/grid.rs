@@ -30,6 +30,8 @@ pub struct GridState {
     pub player_pos: GridPos,
 
     pub entities_pending_removal: Vec<Entity>,
+
+    pub diamond_count: usize,
 }
 
 impl GridState {
@@ -37,6 +39,7 @@ impl GridState {
     //     self.entities.get(pos)
     // }
 
+    /*
     fn move_player_to(
         &mut self,
         dst_pos: GridPos,
@@ -62,9 +65,44 @@ impl GridState {
         player.moved = true;
         player.pos = dst_pos;
     }
+    */
+
+    // move something from src_pos to dst_pos
+    // anything at dst_pos will be destroyed
+    fn move_entity_to(
+        &mut self,
+        src_pos: GridPos,
+        dst_pos: GridPos,
+        storage: &mut WriteStorage<'_, GridObjectState>,
+    ) {
+        let entity = self
+            .entities
+            .get_mut(src_pos)
+            .take()
+            .expect("entity be there");
+
+        let dst_entity_mut_ref = self.entities.get_mut(dst_pos);
+        if let Some(dst_entity) = dst_entity_mut_ref.take() {
+            self.entities_pending_removal.push(dst_entity);
+        }
+        *dst_entity_mut_ref = Some(entity);
+
+        let src_type = self.tiles.get(src_pos);
+        *self.tiles.get_mut(src_pos) = TileType::Empty;
+        *self.tiles.get_mut(dst_pos) = src_type;
+        if self.player_pos == src_pos {
+            assert_eq!(src_type, TileType::Player);
+            self.player_pos = dst_pos;
+        }
+
+        // alter moved object itself
+        let mut object = storage.get_mut(entity).expect("object be there");
+        object.moved = true;
+        object.pos = dst_pos;
+    }
 }
 
-#[derive(Default, Copy, Clone, Debug)]
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct GridPos {
     pub x: usize,
     pub y: usize,
@@ -169,13 +207,13 @@ impl GridRulesSystem {
         }
 
         let state = GridState {
-            last_grid_tick: Default::default(),
             entities,
             tiles_prev: grid.clone(),
             tiles: grid.clone(),
             sprites: Some(sprites.clone()),
             player_pos: start,
             entities_pending_removal: vec![],
+            ..GridState::default()
         };
         world.register::<grid::GridObjectState>();
         world.insert(state);
@@ -295,10 +333,26 @@ impl<'s> System<'s> for GridRulesSystem {
             let dst_pos = player_pos.direction(action.direction);
             let dst_type = grid_map_state.tiles.get(dst_pos);
             if dst_type.is_empty() {
-                grid_map_state.move_player_to(dst_pos, &mut grid_objects);
+                grid_map_state.move_entity_to(player_pos, dst_pos, &mut grid_objects);
                 break;
-            } else if dst_type.is_dirt() {
-                grid_map_state.move_player_to(dst_pos, &mut grid_objects);
+            }
+            if dst_type.is_dirt() {
+                grid_map_state.move_entity_to(player_pos, dst_pos, &mut grid_objects);
+                break;
+            }
+            if dst_type.is_diamond() {
+                grid_map_state.move_entity_to(player_pos, dst_pos, &mut grid_objects);
+                grid_map_state.diamond_count += 1;
+                break;
+            }
+            if dst_type.can_be_pushed() {
+                let past_dst_pos = dst_pos.direction(action.direction);
+                let past_dst_type = grid_map_state.tiles.get(past_dst_pos);
+                if past_dst_type.is_empty() {
+                    grid_map_state.move_entity_to(dst_pos, past_dst_pos, &mut grid_objects);
+                    grid_map_state.move_entity_to(player_pos, dst_pos, &mut grid_objects);
+                    break;
+                }
             }
         }
 
@@ -393,6 +447,20 @@ impl TileType {
         use TileType::*;
         match self {
             Dirt => true,
+            _ => false,
+        }
+    }
+    fn is_diamond(self) -> bool {
+        use TileType::*;
+        match self {
+            Diamond => true,
+            _ => false,
+        }
+    }
+    fn can_be_pushed(self) -> bool {
+        use TileType::*;
+        match self {
+            Rock => true,
             _ => false,
         }
     }

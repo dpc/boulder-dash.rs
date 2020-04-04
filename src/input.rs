@@ -56,19 +56,25 @@ pub struct InputState {
 }
 
 impl InputState {
-    pub fn pop_action(&mut self) -> Option<Action> {
-        if let Some(action) = self.actions_pending.pop_front() {
-            return Some(action);
-        }
+    pub fn pop_action(&mut self) -> Vec<Action> {
+        // if let Some(action) =  {
+        //     return vec![action];
+        // }
 
-        if let Some(direction) = self.movements_down.front().copied() {
-            return Some(Action {
-                direction,
-                fire: self.keys_down.contains(&Button::Fire),
-            });
-        }
-
-        None
+        self.actions_pending
+            .pop_front()
+            .into_iter()
+            .chain(
+                self.movements_down
+                    .iter()
+                    .take(2)
+                    .copied()
+                    .map(|direction| Action {
+                        direction,
+                        fire: self.keys_down.contains(&Button::Fire),
+                    }),
+            )
+            .collect()
     }
 }
 #[derive(SystemDesc)]

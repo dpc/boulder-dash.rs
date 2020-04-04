@@ -6,10 +6,9 @@ use amethyst::{
     core::{SystemDesc, Transform},
     derive::SystemDesc,
     ecs::{
-        prelude::{Component, DenseVecStorage},
-        Entity, Join, Read, System, SystemData, World, Write, WriteStorage,
+        prelude::*, world::Entities, Entity, Join, Read, System, SystemData, World, Write,
+        WriteStorage,
     },
-    prelude::*,
     renderer::{SpriteRender, SpriteSheet},
 };
 use anyhow::{bail, format_err, Result};
@@ -29,6 +28,40 @@ pub struct GridState {
     pub entities: Grid<Option<Entity>>,
     pub sprites: Option<Handle<SpriteSheet>>,
     pub player_pos: GridPos,
+
+    pub entities_pending_removal: Vec<Entity>,
+}
+
+impl GridState {
+    // fn get_entity_at(&self, pos: GridPos) -> Option<Entity> {
+    //     self.entities.get(pos)
+    // }
+
+    fn move_player_to(
+        &mut self,
+        dst_pos: GridPos,
+        storage: &mut WriteStorage<'_, GridObjectState>,
+    ) {
+        let player_pos = self.player_pos;
+        let player_entity = self
+            .entities
+            .get_mut(player_pos)
+            .take()
+            .expect("player be there");
+        let dst_entity_mut_ref = self.entities.get_mut(dst_pos);
+        if let Some(dst_entity) = dst_entity_mut_ref.take() {
+            self.entities_pending_removal.push(dst_entity);
+        }
+        *dst_entity_mut_ref = Some(player_entity);
+
+        *self.tiles.get_mut(player_pos) = TileType::Empty;
+        *self.tiles.get_mut(dst_pos) = TileType::Player;
+        self.player_pos = dst_pos;
+        let mut player = storage.get_mut(player_entity).expect("player be there");
+
+        player.moved = true;
+        player.pos = dst_pos;
+    }
 }
 
 #[derive(Default, Copy, Clone, Debug)]
@@ -142,6 +175,7 @@ impl GridRulesSystem {
             tiles: grid.clone(),
             sprites: Some(sprites.clone()),
             player_pos: start,
+            entities_pending_removal: vec![],
         };
         world.register::<grid::GridObjectState>();
         world.insert(state);
@@ -150,6 +184,7 @@ impl GridRulesSystem {
 
 impl<'s> System<'s> for GridRulesSystem {
     type SystemData = (
+        Entities<'s>,
         WriteStorage<'s, Transform>,
         WriteStorage<'s, grid::GridObjectState>,
         Read<'s, Time>,
@@ -159,7 +194,7 @@ impl<'s> System<'s> for GridRulesSystem {
 
     fn run(
         &mut self,
-        (mut transforms, mut grid_objects, time, mut grid_map_state, mut input_state): Self::SystemData,
+        (entitites, mut transforms, mut grid_objects, time, mut grid_map_state, mut input_state): Self::SystemData,
     ) {
         let do_grid_tick = grid_map_state
             .last_grid_tick
@@ -253,27 +288,22 @@ impl<'s> System<'s> for GridRulesSystem {
         }
 
         let player_pos = grid_map_state.player_pos;
-        let player_entity = grid_map_state
-            .entities
-            .get(player_pos)
-            .expect("player entity there");
-
-        let player = grid_objects
-            .get_mut(player_entity)
-            .expect("player by entity there");
 
         debug_assert!(grid_map_state.tiles.get(player_pos).is_player());
 
-        if let Some(action) = input_state.pop_action() {
+        for action in input_state.pop_action() {
             let dst_pos = player_pos.direction(action.direction);
             let dst_type = grid_map_state.tiles.get(dst_pos);
             if dst_type.is_empty() {
-                grid_map_state.tiles.swap(player_pos, dst_pos);
-                grid_map_state.entities.swap(player_pos, dst_pos);
-                player.pos = dst_pos;
-                player.moved = true;
-                grid_map_state.player_pos = dst_pos;
+                grid_map_state.move_player_to(dst_pos, &mut grid_objects);
+                break;
+            } else if dst_type.is_dirt() {
+                grid_map_state.move_player_to(dst_pos, &mut grid_objects);
             }
+        }
+
+        for entity in grid_map_state.entities_pending_removal.drain(..) {
+            entitites.delete(entity).expect("not to fail");
         }
 
         for (object, transform) in (&mut grid_objects, &mut transforms).join() {
@@ -355,6 +385,14 @@ impl TileType {
         use TileType::*;
         match self {
             Player => true,
+            _ => false,
+        }
+    }
+
+    fn is_dirt(self) -> bool {
+        use TileType::*;
+        match self {
+            Dirt => true,
             _ => false,
         }
     }

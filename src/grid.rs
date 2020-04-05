@@ -36,38 +36,6 @@ pub struct GridState {
 }
 
 impl GridState {
-    // fn get_entity_at(&self, pos: GridPos) -> Option<Entity> {
-    //     self.entities.get(pos)
-    // }
-
-    /*
-    fn move_player_to(
-        &mut self,
-        dst_pos: GridPos,
-        storage: &mut WriteStorage<'_, GridObjectState>,
-    ) {
-        let player_pos = self.player_pos;
-        let player_entity = self
-            .entities
-            .get_mut(player_pos)
-            .take()
-            .expect("player be there");
-        let dst_entity_mut_ref = self.entities.get_mut(dst_pos);
-        if let Some(dst_entity) = dst_entity_mut_ref.take() {
-            self.entities_pending_removal.push(dst_entity);
-        }
-        *dst_entity_mut_ref = Some(player_entity);
-
-        *self.tiles.get_mut(player_pos) = TileType::Empty;
-        *self.tiles.get_mut(dst_pos) = TileType::Player;
-        self.player_pos = dst_pos;
-        let mut player = storage.get_mut(player_entity).expect("player be there");
-
-        player.moved = true;
-        player.pos = dst_pos;
-    }
-    */
-
     // move something from src_pos to dst_pos
     // anything at dst_pos will be destroyed
     fn move_entity_to(
@@ -238,7 +206,7 @@ impl<'s> System<'s> for GridRulesSystem {
     ) {
         let do_grid_tick = grid_map_state
             .last_grid_tick
-            .map(|last| Duration::from_millis(125) < time.absolute_time() - last)
+            .map(|last| Duration::from_millis(100) < time.absolute_time() - last)
             .unwrap_or(true);
 
         if do_grid_tick {

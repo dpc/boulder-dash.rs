@@ -62,7 +62,7 @@ impl CameraSystem {
 
     pub fn update_screen_dimensions(world: &mut World) {
         let dimensions = (*world.read_resource::<ScreenDimensions>()).clone();
-        world.insert(Some(dimensions.clone()));
+        world.insert(Some(dimensions));
     }
 }
 
@@ -96,7 +96,7 @@ impl<'s> System<'s> for CameraSystem {
 
         let screen_w = screen_dimensions.width();
         let screen_h = screen_dimensions.height();
-        let zoom_level = (*zoom_level).clone().0;
+        let zoom_level = (*zoom_level).0;
         let camera_w = screen_w / zoom_level;
         let camera_h = screen_h / zoom_level;
         let padding_x = camera_w / 2.;

@@ -17,6 +17,7 @@ in
       python3
       vulkan-validation-layers
       xlibs.libX11
+      musl
     ];
 
     APPEND_LIBRARY_PATH = stdenv.lib.makeLibraryPath [

@@ -1,14 +1,13 @@
 use amethyst::{
     assets::Handle,
     assets::{AssetStorage, Loader},
-    core::transform::Transform,
     input::{get_key, is_close_requested, is_key_down, VirtualKeyCode},
     prelude::*,
-    renderer::{Camera, ImageFormat, SpriteSheet, SpriteSheetFormat, Texture},
+    renderer::{ImageFormat, SpriteSheet, SpriteSheetFormat, Texture},
     window::ScreenDimensions,
 };
 
-use crate::{grid, input};
+use crate::{camera, grid, input};
 use log::info;
 
 pub struct MyState;
@@ -25,13 +24,16 @@ impl SimpleState for MyState {
         // pass the world mutably to the following functions.
         let dimensions = (*world.read_resource::<ScreenDimensions>()).clone();
 
-        // Place the camera
-        init_camera(world, &dimensions);
-
         // Load our sprites and display them
         let sprites = load_sprites(world);
         grid::GridRulesSystem::init(world, sprites);
         input::InputSystem::init(world);
+        camera::CameraSystem::init(world, &dimensions);
+    }
+
+    fn update(&mut self, data: &mut StateData<'_, GameData<'_, '_>>) -> SimpleTrans {
+        camera::CameraSystem::update_screen_dimensions(&mut data.world);
+        SimpleTrans::None
     }
 
     fn handle_event(
@@ -58,21 +60,6 @@ impl SimpleState for MyState {
         // Keep going
         Trans::None
     }
-}
-
-fn init_camera(world: &mut World, dimensions: &ScreenDimensions) {
-    let camera_x = dimensions.width();
-    let camera_y = dimensions.height();
-    // Center the camera in the middle of the screen, and let it cover
-    // the entire screen
-    let mut transform = Transform::default();
-    transform.set_translation_xyz(camera_x * 0.5, camera_y * 0.5, 1.);
-
-    world
-        .create_entity()
-        .with(Camera::standard_2d(camera_x, camera_y))
-        .with(transform)
-        .build();
 }
 
 fn load_sprites(world: &mut World) -> Handle<SpriteSheet> {

@@ -10,6 +10,7 @@ use amethyst::{
     utils::application_root_dir,
 };
 
+mod camera;
 mod grid;
 mod input;
 mod state;
@@ -41,6 +42,11 @@ fn main() -> amethyst::Result<()> {
             grid::GridRulesSystem,
             "grid_object_system",
             &["input_system"],
+        )
+        .with(
+            camera::CameraSystem::default(),
+            "camera_system",
+            &["grid_object_system"],
         );
 
     let mut game = Application::new(resources, state::MyState, game_data)?;

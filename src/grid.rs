@@ -479,12 +479,18 @@ impl<T> Grid<T>
 where
     T: Clone + Default,
 {
-    fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: usize, height: usize) -> Self {
         Self {
             width,
             height,
             vals: vec![Default::default(); width * height],
         }
+    }
+    pub fn height(&self) -> usize {
+        self.height
+    }
+    pub fn width(&self) -> usize {
+        self.width
     }
     fn swap(&mut self, p1: GridPos, p2: GridPos) {
         let tmp = self.get(p1);

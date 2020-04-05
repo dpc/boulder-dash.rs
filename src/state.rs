@@ -1,7 +1,7 @@
 use amethyst::{
     assets::Handle,
     assets::{AssetStorage, Loader},
-    input::{get_key, is_close_requested, is_key_down, VirtualKeyCode},
+    input::{get_key, is_close_requested, is_key_down, ElementState, VirtualKeyCode},
     prelude::*,
     renderer::{ImageFormat, SpriteSheet, SpriteSheetFormat, Texture},
     window::ScreenDimensions,
@@ -38,7 +38,7 @@ impl SimpleState for MyState {
 
     fn handle_event(
         &mut self,
-        mut _data: StateData<'_, GameData<'_, '_>>,
+        data: StateData<'_, GameData<'_, '_>>,
         event: StateEvent,
     ) -> SimpleTrans {
         if let StateEvent::Window(event) = &event {
@@ -50,6 +50,24 @@ impl SimpleState for MyState {
             // Listen to any key events
             if let Some(event) = get_key(&event) {
                 info!("handling key event: {:?}", event);
+                match event {
+                    (VirtualKeyCode::Add, ElementState::Pressed)
+                    | (VirtualKeyCode::Equals, ElementState::Pressed) => {
+                        let zoom = dbg!(*data.world.read_resource::<camera::ZoomLevel>())
+                            .clone()
+                            .up();
+                        data.world.insert(zoom);
+                    }
+                    (VirtualKeyCode::Subtract, ElementState::Pressed) => {
+                        let zoom = data
+                            .world
+                            .read_resource::<camera::ZoomLevel>()
+                            .clone()
+                            .down();
+                        data.world.insert(zoom);
+                    }
+                    _ => {}
+                }
             }
 
             // If you're looking for a more sophisticated event handling solution,

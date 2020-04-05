@@ -11,6 +11,28 @@ use amethyst::{
 use crate::grid;
 use crate::TILE_SIZE;
 
+#[derive(Debug, Copy, Clone)]
+pub struct ZoomLevel(f32);
+
+impl std::default::Default for ZoomLevel {
+    fn default() -> Self {
+        ZoomLevel(1.)
+    }
+}
+
+impl ZoomLevel {
+    fn new() -> Self {
+        ZoomLevel(1.)
+    }
+    pub fn up(self) -> Self {
+        Self(clamp(self.0 * 2., 0.25, 8.))
+    }
+
+    pub fn down(self) -> Self {
+        Self(clamp(self.0 * 0.5, 0.25, 8.))
+    }
+}
+
 #[derive(SystemDesc, Debug, Default)]
 pub struct CameraSystem {
     current_x: f32,
@@ -33,6 +55,8 @@ impl CameraSystem {
             .with(transform)
             .build();
 
+        world.insert(ZoomLevel::new());
+
         Self::update_screen_dimensions(world);
     }
 
@@ -42,12 +66,9 @@ impl CameraSystem {
     }
 }
 
-fn clamp<T>(v: T, low: T, high: T) -> T
-where
-    T: std::cmp::PartialOrd,
-{
+fn clamp(v: f32, low: f32, high: f32) -> f32 {
     if low > high {
-        v
+        (low + high) / 2.
     } else if v < low {
         low
     } else if high < v {
@@ -64,18 +85,22 @@ impl<'s> System<'s> for CameraSystem {
         Read<'s, Time>,
         Read<'s, grid::GridState>,
         Read<'s, Option<ScreenDimensions>>,
+        Read<'s, ZoomLevel>,
     );
 
     fn run(
         &mut self,
-        (mut camera, mut transform, time, grid_map_state, screen_dimensions): Self::SystemData,
+        (mut camera, mut transform, time, grid_map_state, screen_dimensions, zoom_level): Self::SystemData,
     ) {
         let screen_dimensions = screen_dimensions.as_ref().expect("screen dimmensions set");
 
         let screen_w = screen_dimensions.width();
         let screen_h = screen_dimensions.height();
-        let padding_x = screen_w / 2.;
-        let padding_y = screen_h / 2.;
+        let zoom_level = (*zoom_level).clone().0;
+        let camera_w = screen_w / zoom_level;
+        let camera_h = screen_h / zoom_level;
+        let padding_x = camera_w / 2.;
+        let padding_y = camera_h / 2.;
 
         let desired_x = clamp(
             grid_map_state.player_pos.x as f32 * TILE_SIZE,
@@ -93,7 +118,7 @@ impl<'s> System<'s> for CameraSystem {
         let desired_camera = Camera::standard_2d(
             // tiles_width_to_show * 32.,
             // tiles_width_to_show * 32. * screen_h / screen_w,
-            screen_w, screen_h,
+            camera_w, camera_h,
         );
         for (camera, transform) in (&mut camera, &mut transform).join() {
             *camera = desired_camera.clone();

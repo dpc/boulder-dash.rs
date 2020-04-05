@@ -1,5 +1,5 @@
 (
   title: "Boulder Dash",
   fullscreen: Some((0, "")),
-    maximized: true,
+  maximized: true,
 )

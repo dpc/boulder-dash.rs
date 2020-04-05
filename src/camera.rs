@@ -9,6 +9,7 @@ use amethyst::{
 };
 
 use crate::grid;
+use crate::TILE_SIZE;
 
 #[derive(SystemDesc, Debug, Default)]
 pub struct CameraSystem {
@@ -40,8 +41,6 @@ impl CameraSystem {
         world.insert(Some(dimensions.clone()));
     }
 }
-
-const TILE_SIZE: f32 = 32.;
 
 fn clamp<T>(v: T, low: T, high: T) -> T
 where

@@ -15,6 +15,8 @@ mod grid;
 mod input;
 mod state;
 
+const TILE_SIZE: f32 = 128.;
+
 fn main() -> amethyst::Result<()> {
     amethyst::start_logger(Default::default());
 

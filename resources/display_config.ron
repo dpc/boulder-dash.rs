@@ -1,4 +1,5 @@
 (
-  title: "amethyst-cli-starter-2d",
-  dimensions: Some((800, 600)),
+  title: "Boulder Dash",
+  fullscreen: Some((0, "")),
+    maximized: true,
 )

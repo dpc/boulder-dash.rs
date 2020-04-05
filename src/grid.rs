@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::input::{self, Direction};
+use crate::TILE_SIZE;
 
 #[derive(Default)]
 pub struct GridState {
@@ -110,7 +111,7 @@ pub struct GridPos {
 
 impl GridPos {
     fn to_translation(self) -> Vector3<f32> {
-        Vector3::new(self.x as f32 * 32., self.y as f32 * 32., 0.)
+        Vector3::new(self.x as f32 * TILE_SIZE, self.y as f32 * TILE_SIZE, 0.)
     }
 }
 
@@ -194,6 +195,7 @@ impl GridRulesSystem {
 
                     let mut transform = Transform::default();
                     transform.set_translation(pos.to_translation());
+                    transform.set_scale(Vector3::new(TILE_SIZE / 32., TILE_SIZE / 32., 1.));
                     let entity = world
                         .create_entity()
                         .with(sprite_render)

@@ -38,12 +38,20 @@ pub struct GridState {
 impl GridState {
     // move something from src_pos to dst_pos
     // anything at dst_pos will be destroyed
-    fn move_entity_to(
+    fn move_grid_object_by_src_pos(
         &mut self,
         src_pos: GridPos,
         dst_pos: GridPos,
         storage: &mut WriteStorage<'_, GridObjectState>,
     ) {
+        let entity = self.entities.get_mut(src_pos).expect("entity be there");
+        let object = storage.get_mut(entity).expect("object be there");
+        self.move_grid_object(object, dst_pos);
+    }
+
+    fn move_grid_object(&mut self, grid_object: &mut GridObjectState, dst_pos: GridPos) {
+        let src_pos = grid_object.pos;
+
         let entity = self
             .entities
             .get_mut(src_pos)
@@ -64,10 +72,8 @@ impl GridState {
             self.player_pos = dst_pos;
         }
 
-        // alter moved object itself
-        let mut object = storage.get_mut(entity).expect("object be there");
-        object.moved = true;
-        object.pos = dst_pos;
+        grid_object.moved = true;
+        grid_object.pos = dst_pos;
     }
 }
 
@@ -206,7 +212,7 @@ impl<'s> System<'s> for GridRulesSystem {
     ) {
         let do_grid_tick = grid_map_state
             .last_grid_tick
-            .map(|last| Duration::from_millis(100) < time.absolute_time() - last)
+            .map(|last| Duration::from_millis(125) < time.absolute_time() - last)
             .unwrap_or(true);
 
         if do_grid_tick {
@@ -216,11 +222,10 @@ impl<'s> System<'s> for GridRulesSystem {
         }
 
         // objects falling straight down
-        for mut object in (&mut grid_objects).join() {
+        for object in (&mut grid_objects).join() {
             let GridState {
                 ref tiles_prev,
                 ref mut tiles,
-                ref mut entities,
                 ..
             } = *grid_map_state;
 
@@ -234,12 +239,7 @@ impl<'s> System<'s> for GridRulesSystem {
             let type_below = tiles.get(pos_below);
             let type_below_prev = tiles_prev.get(pos_below);
             if type_below.is_empty() && type_below_prev.is_empty() {
-                tiles.swap(object.pos, pos_below);
-                entities.swap(object.pos, pos_below);
-                // *tiles.get_mut(*pos) = type_below;
-                // *tiles.get_mut(pos_below) = type_;
-                object.pos = pos_below;
-                object.moved = true;
+                grid_map_state.move_grid_object(object, pos_below);
             }
         }
 
@@ -252,7 +252,6 @@ impl<'s> System<'s> for GridRulesSystem {
             let GridState {
                 ref tiles_prev,
                 ref mut tiles,
-                ref mut entities,
                 ..
             } = *grid_map_state;
 
@@ -282,16 +281,13 @@ impl<'s> System<'s> for GridRulesSystem {
                 && tiles.get(pos_right_down).is_empty()
                 && tiles_prev.get(pos_right_down).is_empty();
 
-            if let Some(move_pos) = match (left_free, right_free) {
+            if let Some(dst_pos) = match (left_free, right_free) {
                 (true, true) => Some(pos_left), // TODO: randomize?
                 (true, false) => Some(pos_left),
                 (false, true) => Some(pos_right),
                 (false, false) => None,
             } {
-                tiles.swap(object.pos, move_pos);
-                entities.swap(object.pos, move_pos);
-                object.pos = move_pos;
-                object.moved = true;
+                grid_map_state.move_grid_object(object, dst_pos);
             }
         }
 
@@ -303,15 +299,15 @@ impl<'s> System<'s> for GridRulesSystem {
             let dst_pos = player_pos.direction(action.direction);
             let dst_type = grid_map_state.tiles.get(dst_pos);
             if dst_type.is_empty() {
-                grid_map_state.move_entity_to(player_pos, dst_pos, &mut grid_objects);
+                grid_map_state.move_grid_object_by_src_pos(player_pos, dst_pos, &mut grid_objects);
                 break;
             }
             if dst_type.is_dirt() {
-                grid_map_state.move_entity_to(player_pos, dst_pos, &mut grid_objects);
+                grid_map_state.move_grid_object_by_src_pos(player_pos, dst_pos, &mut grid_objects);
                 break;
             }
             if dst_type.is_diamond() {
-                grid_map_state.move_entity_to(player_pos, dst_pos, &mut grid_objects);
+                grid_map_state.move_grid_object_by_src_pos(player_pos, dst_pos, &mut grid_objects);
                 grid_map_state.diamond_count += 1;
                 break;
             }
@@ -319,8 +315,16 @@ impl<'s> System<'s> for GridRulesSystem {
                 let past_dst_pos = dst_pos.direction(action.direction);
                 let past_dst_type = grid_map_state.tiles.get(past_dst_pos);
                 if past_dst_type.is_empty() {
-                    grid_map_state.move_entity_to(dst_pos, past_dst_pos, &mut grid_objects);
-                    grid_map_state.move_entity_to(player_pos, dst_pos, &mut grid_objects);
+                    grid_map_state.move_grid_object_by_src_pos(
+                        dst_pos,
+                        past_dst_pos,
+                        &mut grid_objects,
+                    );
+                    grid_map_state.move_grid_object_by_src_pos(
+                        player_pos,
+                        dst_pos,
+                        &mut grid_objects,
+                    );
                     break;
                 }
             }
@@ -459,13 +463,9 @@ where
     pub fn height(&self) -> usize {
         self.height
     }
+
     pub fn width(&self) -> usize {
         self.width
-    }
-    fn swap(&mut self, p1: GridPos, p2: GridPos) {
-        let tmp = self.get(p1);
-        *self.get_mut(p1) = self.get(p2);
-        *self.get_mut(p2) = tmp;
     }
 
     fn get(&self, pos: GridPos) -> T {

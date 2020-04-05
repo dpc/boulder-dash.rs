@@ -112,17 +112,10 @@ impl<'s> System<'s> for CameraSystem {
             padding_y,
             (grid_map_state.tiles.height().saturating_sub(1) as f32 * TILE_SIZE) - padding_y,
         );
-        // let desired_x = screen_w / 2.;
-        // let desired_y = screen_h / 2.;
 
-        let desired_camera = Camera::standard_2d(
-            // tiles_width_to_show * 32.,
-            // tiles_width_to_show * 32. * screen_h / screen_w,
-            camera_w, camera_h,
-        );
+        let desired_camera = Camera::standard_2d(camera_w, camera_h);
         for (camera, transform) in (&mut camera, &mut transform).join() {
             *camera = desired_camera.clone();
-            // let current_translation = transform.translation().clone();
             let max_dv = 3. * TILE_SIZE * time.delta_real_seconds();
             let dx = (desired_x - self.current_x).max(-max_dv).min(max_dv);
             let dy = (desired_y - self.current_y).max(-max_dv).min(max_dv);

@@ -19,5 +19,5 @@ nightly = ["amethyst/nightly"]
 [profile.dev]
 opt-level = 1
 lto = false
-debug = false
+debug = true
 incremental = true

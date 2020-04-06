@@ -10,9 +10,9 @@ use amethyst::{
     utils::application_root_dir,
 };
 
-mod camera;
-mod grid;
-mod input;
+pub mod system;
+
+pub use system::*;
 mod map;
 mod state;
 
@@ -39,20 +39,9 @@ fn main() -> amethyst::Result<()> {
                     RenderToWindow::from_config_path(display_config).with_clear([0., 0., 0., 1.0]),
                 )
                 .with_plugin(RenderFlat2D::default()),
-        )?
-        .with(input::InputSystem, "own_input_system", &[])
-        .with(
-            grid::GridRulesSystem,
-            "grid_object_system",
-            &["input_system"],
-        )
-        .with(
-            camera::CameraSystem::default(),
-            "camera_system",
-            &["grid_object_system"],
-        );
+        )?;
 
-    let mut game = Application::new(resources, state::MyState, game_data)?;
+    let mut game = Application::new(resources, state::MainScreen, game_data)?;
     game.run();
 
     Ok(())

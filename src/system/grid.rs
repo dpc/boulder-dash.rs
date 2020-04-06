@@ -155,6 +155,7 @@ impl GridRulesSystem {
             crate::map::MapDescription::load("./resources/map/01.txt".into()).unwrap();
         let mut entities = Grid::new(grid.width, grid.height);
 
+        world.register::<grid::GridObjectState>();
         for y in 0..grid.height {
             for x in 0..grid.width {
                 let pos = GridPos { x, y };
@@ -189,8 +190,21 @@ impl GridRulesSystem {
             entities_pending_removal: vec![],
             ..GridState::default()
         };
-        world.register::<grid::GridObjectState>();
         world.insert(state);
+    }
+
+    pub fn deinit(world: &mut World) {
+        let mut state = world.remove::<GridState>().expect("state initialized");
+        {
+        let entities = world.entities();
+
+        for entity in state.entities.vals.drain(..) {
+            if let Some(entity) = entity {
+                entities.delete(entity).expect("delete should work");
+            }
+        }
+        }
+        world.maintain();
     }
 }
 

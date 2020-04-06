@@ -13,6 +13,7 @@ use amethyst::{
 mod camera;
 mod grid;
 mod input;
+mod map;
 mod state;
 
 const TILE_SIZE: f32 = 32.;

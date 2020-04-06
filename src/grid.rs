@@ -11,13 +11,10 @@ use amethyst::{
     },
     renderer::{SpriteRender, SpriteSheet},
 };
-use anyhow::{bail, format_err, Result};
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::input::{self, Direction};
+use crate::map::MapDescription;
 use crate::TILE_SIZE;
 
 #[derive(Default)]
@@ -154,7 +151,8 @@ pub struct GridRulesSystem;
 
 impl GridRulesSystem {
     pub fn init(world: &mut World, sprites: Handle<SpriteSheet>) {
-        let LoadMapData { grid, start } = load_map("./resources/map/01.txt".into()).unwrap();
+        let MapDescription { grid, start } =
+            crate::map::MapDescription::load("./resources/map/01.txt".into()).unwrap();
         let mut entities = Grid::new(grid.width, grid.height);
 
         for y in 0..grid.height {
@@ -468,18 +466,18 @@ where
         self.width
     }
 
-    fn get(&self, pos: GridPos) -> T {
+    pub fn get(&self, pos: GridPos) -> T {
         self.get_ref(pos).clone()
     }
 
-    fn set(&mut self, pos: GridPos, v: T) {
+    pub fn set(&mut self, pos: GridPos, v: T) {
         *self.get_mut(pos) = v;
     }
 
-    fn get_ref(&self, pos: GridPos) -> &T {
+    pub fn get_ref(&self, pos: GridPos) -> &T {
         &self.vals[pos.x + pos.y * self.width]
     }
-    fn get_mut(&mut self, pos: GridPos) -> &mut T {
+    pub fn get_mut(&mut self, pos: GridPos) -> &mut T {
         &mut self.vals[pos.x + pos.y * self.width]
     }
 }
@@ -494,55 +492,4 @@ where
 
         self.vals[..].copy_from_slice(&other.vals);
     }
-}
-
-struct LoadMapData {
-    grid: TileTypeGrid,
-    start: GridPos,
-}
-
-fn load_map(path: PathBuf) -> Result<LoadMapData> {
-    let mut start = None;
-
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let lines: Result<Vec<String>> = reader.lines().map(|e| e.map_err(|e| e.into())).collect();
-    let lines = lines?;
-    let width = lines[0].len();
-    let height = lines.len();
-
-    let mut grid = TileTypeGrid::new(width, height);
-
-    for (y, line) in lines.iter().rev().enumerate() {
-        if width != line.len() {
-            bail!("Lines not equal len");
-        }
-
-        for (x, ch) in line.chars().enumerate() {
-            let pos = GridPos::new(x, y);
-            grid.set(
-                pos,
-                match ch {
-                    's' => {
-                        if start.is_some() {
-                            bail!("Multiple starting positions found");
-                        }
-                        start = Some(pos);
-                        TileType::Player
-                    }
-                    '#' => TileType::Steel,
-                    '%' => TileType::Wall,
-                    '.' => TileType::Dirt,
-                    'o' => TileType::Rock,
-                    '*' => TileType::Diamond,
-                    _ => TileType::Empty,
-                },
-            );
-        }
-    }
-
-    Ok(LoadMapData {
-        grid,
-        start: start.ok_or_else(|| format_err!("No start position found"))?,
-    })
 }

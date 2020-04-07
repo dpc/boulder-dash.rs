@@ -1,66 +1,47 @@
-<p align="center">
-  <a href="https://amethyst.rs">
-    <img
-        alt="Amethyst"
-        src="https://amethyst.rs/brand/logo-standard.svg"
-        width="60"
-    />
-  </a>
-</p>
-<h1 align="center">
-  Amethyst 2D Starter
-</h1>
+![boulder-dash.rs screenshot](https://i.imgur.com/B47GWJm.png)
 
-This project template will get you from 0 to drawing something on the screen in no time. If you're looking for a more in-depth introduction to the engine, please have a look at [our book](https://book.amethyst.rs/stable/)!
+# Boulder Dash in Rust (using Amethyst game engine)
 
-## Quickstart
+Boulder Dash is probably my favourite game of all times. I used
+to play it a lot on my C-64 when I was a kid. This is how it looked: https://www.youtube.com/watch?v=FiEVfa1OK_o
 
-- Clone the repository
+Since I wanted to try out [amethyst game engine](https://amethyst.rs/), I decided
+to try to build a remake/clone of Boulder Dash.
 
-```bash
-git clone https://github.com/amethyst/amethyst-starter-2d.git
-cd amethyst-starter-2d
-```
+## Status
 
-- Build and run the project
+Some basics work. You can move around and eat diamonds, rocks fall down. My son
+actually enjoys it a lot. Maps can be created in a text editor.
 
-```bash
-cargo run
-```
+Start with `cargo run`.
 
-#### For Mac Users
+Use -/+ for zoom level, arrows to move.
 
-This starter uses vulkan as a renderer by default. You'll want to change the backend to use `metal`, which can be done by opening the `Cargo.toml` file and changing
+**If you're looking for a fun project to hack on, I'd be happy to accept help**. 
+I actually don't have a lot of time to work on it myself, so I'd mostly be a
+sidekick, I guess.
 
-```toml
-[features]
-default = ["vulkan"]
-```
+## Goals & ideas
 
-to
+* Add animation and sound
+* Add all the original behaviors
+* Experiment with new behaviors:
+  * my son is happy with rocks being harmless
+  * push rocks up adds more puzzle-like possibilities
+* Add support for BDCFF and other BD-community standards
+* Use the power of ECS and try maaaaasive maps.
+* Compile down to WASM so it can work in a browser
+* Build-in map editor would be nice
+* server-side verified highscores?
+* multiplayer?
+* sky is the limit!
 
-```toml
-[features]
-default = ["metal"]
-```
 
-If using OSX and Metal you will require full XCode installed from the Appstore in order to compile metal shaders.
-After install you may be required to run this command `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer` [reference gfx-rs issue](https://github.com/gfx-rs/gfx/issues/2472)
+# Alternatives & links
 
-#### For Linux Users
+There's a big community of Boulder Dash fans around the world,
+and it's a common game to make remakes of. Unfortunately a lot
+of remakes suffer bit-rot. Feel free to submit link here:
 
-You might need to install some dependencies. Please refer to [this section](https://github.com/amethyst/amethyst#dependencies) of the README for more details.
-
-## Features
-
-This project contains the minimum amount of code needed to draw sprites to the screen. Here's a small summary of what you'll find in the source files:
-
-- `resources/display_config.ron`  
-  Contains the window configuration (size, title).
-
-- `src/main.rs`  
-  Creates the render graph, adds the required bundles, builds the game data with our own state and finally, starts the game's main event loop.
-
-- `src/state.rs`  
-  Implements the main game state. In the `on_start` hook, the camera is initialized, and the sprites that will be drawn are loaded and their entities created.  
-   In the `handle_event` hook, we print any keys that were pressed and close the window if the user presses escape or the OS requests that we quit.
+* http://www.boulder-dash.nl/ - great source of materials
+* https://github.com/irmen/bouldercaves - BD clone in Python

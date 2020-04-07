@@ -2,7 +2,10 @@
 name = "bd"
 version = "0.1.0"
 authors = ["Dawid Ciężarkiewicz"]
+description = "Remake of Boulder Dash in Rust, using Amethyst engine"
 edition = "2018"
+license = "MPL-2.0 OR MIT OR Apache-2.0"
+readme = "README.md"
 
 [dependencies]
 amethyst = "0.13.0"

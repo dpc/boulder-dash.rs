@@ -16,13 +16,6 @@ pub enum Button {
 }
 
 impl Button {
-    fn all() -> &'static [Self] {
-        use Button::*;
-        use Direction::*;
-        // Important: fire is first, so it's processed first
-        &[Fire, Move(Up), Move(Down), Move(Left), Move(Right)]
-    }
-
     fn from_key(key: VirtualKeyCode) -> Option<Self> {
         use Button::*;
         use Direction::*;
@@ -36,6 +29,7 @@ impl Button {
         })
     }
 
+    #[allow(unused)]
     fn to_key(self) -> VirtualKeyCode {
         use Button::*;
         use Direction::*;

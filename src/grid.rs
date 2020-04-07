@@ -2,12 +2,10 @@ use crate::grid;
 use amethyst::{
     assets::Handle,
     core::math::Vector3,
-    core::timing::Time,
     core::Transform,
-    ecs::{prelude::*, world::Entities, Entity, Join, Read, World, Write, WriteStorage},
+    ecs::{prelude::*, world::Entities, Entity, Join, World, Write, WriteStorage},
     renderer::{SpriteRender, SpriteSheet},
 };
-use std::time::Duration;
 
 use crate::input::{self, Direction};
 use crate::map::MapDescription;
@@ -15,8 +13,6 @@ use crate::TILE_SIZE;
 
 #[derive(Default)]
 pub struct GridState {
-    pub last_grid_tick: Option<Duration>,
-
     pub tiles_prev: TileTypeGrid,
     pub tiles: TileTypeGrid,
     pub entities: Grid<Option<Entity>>,
@@ -63,8 +59,8 @@ impl GridState {
         let state = GridState {
             entities,
             tiles_prev: grid.clone(),
-            tiles: grid.clone(),
-            sprites: Some(sprites.clone()),
+            tiles: grid,
+            sprites: Some(sprites),
             player_pos: start,
             entities_pending_removal: vec![],
             ..GridState::default()
@@ -127,25 +123,66 @@ impl GridState {
     }
 
     pub fn run_tick(&mut self, world: &mut World, action: Vec<input::Action>) {
-        let (entitites, mut transforms, mut grid_objects, time, mut grid_map_state): (
+        let (entitites, mut transforms, mut grid_objects, mut grid_map_state): (
             Entities,
             WriteStorage<Transform>,
             WriteStorage<grid::GridObjectState>,
-            Read<Time>,
             Write<GridState>,
         ) = world.system_data();
 
-        let do_grid_tick = grid_map_state
-            .last_grid_tick
-            .map(|last| Duration::from_millis(125) < time.absolute_time() - last)
-            .unwrap_or(true);
+        // handle player
+        {
+            let player_pos = grid_map_state.player_pos;
 
-        if do_grid_tick {
-            grid_map_state.last_grid_tick = Some(time.absolute_time());
-        } else {
-            return;
+            debug_assert!(grid_map_state.tiles.get(player_pos).is_player());
+
+            for action in action {
+                let dst_pos = player_pos.direction(action.direction);
+                let dst_type = grid_map_state.tiles.get(dst_pos);
+                if dst_type.is_empty() {
+                    grid_map_state.move_grid_object_by_src_pos(
+                        player_pos,
+                        dst_pos,
+                        &mut grid_objects,
+                    );
+                    break;
+                }
+                if dst_type.is_dirt() {
+                    grid_map_state.move_grid_object_by_src_pos(
+                        player_pos,
+                        dst_pos,
+                        &mut grid_objects,
+                    );
+                    break;
+                }
+                if dst_type.is_diamond() {
+                    grid_map_state.move_grid_object_by_src_pos(
+                        player_pos,
+                        dst_pos,
+                        &mut grid_objects,
+                    );
+                    grid_map_state.diamond_count += 1;
+                    break;
+                }
+                if dst_type.can_be_pushed() {
+                    let past_dst_pos = dst_pos.direction(action.direction);
+                    let past_dst_type = grid_map_state.tiles.get(past_dst_pos);
+                    if past_dst_type.is_empty() {
+                        grid_map_state.move_grid_object_by_src_pos(
+                            dst_pos,
+                            past_dst_pos,
+                            &mut grid_objects,
+                        );
+                        grid_map_state.move_grid_object_by_src_pos(
+                            player_pos,
+                            dst_pos,
+                            &mut grid_objects,
+                        );
+                        break;
+                    }
+                }
+            }
         }
-
         // objects falling straight down
         for object in (&mut grid_objects).join() {
             let GridState {
@@ -213,45 +250,6 @@ impl GridState {
                 (false, false) => None,
             } {
                 grid_map_state.move_grid_object(object, dst_pos);
-            }
-        }
-
-        let player_pos = grid_map_state.player_pos;
-
-        debug_assert!(grid_map_state.tiles.get(player_pos).is_player());
-
-        for action in action {
-            let dst_pos = player_pos.direction(action.direction);
-            let dst_type = grid_map_state.tiles.get(dst_pos);
-            if dst_type.is_empty() {
-                grid_map_state.move_grid_object_by_src_pos(player_pos, dst_pos, &mut grid_objects);
-                break;
-            }
-            if dst_type.is_dirt() {
-                grid_map_state.move_grid_object_by_src_pos(player_pos, dst_pos, &mut grid_objects);
-                break;
-            }
-            if dst_type.is_diamond() {
-                grid_map_state.move_grid_object_by_src_pos(player_pos, dst_pos, &mut grid_objects);
-                grid_map_state.diamond_count += 1;
-                break;
-            }
-            if dst_type.can_be_pushed() {
-                let past_dst_pos = dst_pos.direction(action.direction);
-                let past_dst_type = grid_map_state.tiles.get(past_dst_pos);
-                if past_dst_type.is_empty() {
-                    grid_map_state.move_grid_object_by_src_pos(
-                        dst_pos,
-                        past_dst_pos,
-                        &mut grid_objects,
-                    );
-                    grid_map_state.move_grid_object_by_src_pos(
-                        player_pos,
-                        dst_pos,
-                        &mut grid_objects,
-                    );
-                    break;
-                }
             }
         }
 

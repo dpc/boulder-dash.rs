@@ -13,6 +13,7 @@ use amethyst::{
 pub mod system;
 
 pub use system::*;
+mod grid;
 mod map;
 mod state;
 

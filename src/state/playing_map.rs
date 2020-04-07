@@ -14,6 +14,8 @@ use log::info;
 pub struct PlayingMap<'a, 'b> {
     dispatcher: Option<Dispatcher<'a, 'b>>,
     sprites: Option<Handle<SpriteSheet>>,
+    grid: grid::GridState,
+    tick_count: u64,
 }
 
 impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
@@ -31,7 +33,7 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
         // Load our sprites and display them
         let sprites = super::load_sprites(world);
         self.sprites = Some(sprites.clone());
-        grid::GridRulesSystem::init(world, sprites);
+        self.grid.init(world, sprites);
         input::InputSystem::init(world);
         camera::CameraSystem::init(world, &dimensions);
 
@@ -39,16 +41,7 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
         let mut dispatcher_builder = DispatcherBuilder::new();
 
         dispatcher_builder.add(input::InputSystem, "own_input_system", &[]);
-        dispatcher_builder.add(
-            grid::GridRulesSystem,
-            "grid_object_system",
-            &["own_input_system"],
-        );
-        dispatcher_builder.add(
-            camera::CameraSystem::default(),
-            "camera_system",
-            &["grid_object_system"],
-        );
+        dispatcher_builder.add(camera::CameraSystem::default(), "camera_system", &[]);
         // Build and setup the `Dispatcher`.
         let mut dispatcher = dispatcher_builder.build();
         dispatcher.setup(world);
@@ -58,7 +51,7 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
 
     fn on_stop(&mut self, data: StateData<'_, GameData<'_, '_>>) {
         let world = data.world;
-        grid::GridRulesSystem::deinit(world);
+        self.grid.deinit(world);
     }
 
     fn update(&mut self, data: &mut StateData<'_, GameData<'_, '_>>) -> SimpleTrans {
@@ -67,6 +60,15 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
         }
 
         camera::CameraSystem::update_screen_dimensions(&mut data.world);
+        SimpleTrans::None
+    }
+
+    fn fixed_update(&mut self, mut data: StateData<'_, GameData<'_, '_>>) -> SimpleTrans {
+        self.tick_count += 1;
+        if self.tick_count % 8 == 0 {
+            self.grid.run_tick(&mut data.world);
+        }
+
         SimpleTrans::None
     }
 
@@ -117,7 +119,8 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
 
 impl<'a, 'b> PlayingMap<'a, 'b> {
     fn restart_map(&mut self, world: &mut World) {
-        grid::GridRulesSystem::deinit(world);
-        grid::GridRulesSystem::init(world, self.sprites.clone().expect("sprites loaded"));
+        self.grid.deinit(world);
+        self.grid
+            .init(world, self.sprites.clone().expect("sprites loaded"));
     }
 }

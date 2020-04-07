@@ -3,12 +3,8 @@ use amethyst::{
     assets::Handle,
     core::math::Vector3,
     core::timing::Time,
-    core::{SystemDesc, Transform},
-    derive::SystemDesc,
-    ecs::{
-        prelude::*, world::Entities, Entity, Join, Read, System, SystemData, World, Write,
-        WriteStorage,
-    },
+    core::Transform,
+    ecs::{prelude::*, world::Entities, Entity, Join, Read, World, Write, WriteStorage},
     renderer::{SpriteRender, SpriteSheet},
 };
 use std::time::Duration;
@@ -33,124 +29,7 @@ pub struct GridState {
 }
 
 impl GridState {
-    // move something from src_pos to dst_pos
-    // anything at dst_pos will be destroyed
-    fn move_grid_object_by_src_pos(
-        &mut self,
-        src_pos: GridPos,
-        dst_pos: GridPos,
-        storage: &mut WriteStorage<'_, GridObjectState>,
-    ) {
-        let entity = self.entities.get_mut(src_pos).expect("entity be there");
-        let object = storage.get_mut(entity).expect("object be there");
-        self.move_grid_object(object, dst_pos);
-    }
-
-    fn move_grid_object(&mut self, grid_object: &mut GridObjectState, dst_pos: GridPos) {
-        let src_pos = grid_object.pos;
-
-        let entity = self
-            .entities
-            .get_mut(src_pos)
-            .take()
-            .expect("entity be there");
-
-        let dst_entity_mut_ref = self.entities.get_mut(dst_pos);
-        if let Some(dst_entity) = dst_entity_mut_ref.take() {
-            self.entities_pending_removal.push(dst_entity);
-        }
-        *dst_entity_mut_ref = Some(entity);
-
-        let src_type = self.tiles.get(src_pos);
-        *self.tiles.get_mut(src_pos) = TileType::Empty;
-        *self.tiles.get_mut(dst_pos) = src_type;
-        if self.player_pos == src_pos {
-            assert_eq!(src_type, TileType::Player);
-            self.player_pos = dst_pos;
-        }
-
-        grid_object.moved = true;
-        grid_object.pos = dst_pos;
-    }
-}
-
-#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
-pub struct GridPos {
-    pub x: usize,
-    pub y: usize,
-}
-
-impl GridPos {
-    fn to_translation(self) -> Vector3<f32> {
-        Vector3::new(self.x as f32 * TILE_SIZE, self.y as f32 * TILE_SIZE, 0.)
-    }
-}
-
-#[derive(Default, Copy, Clone, Debug)]
-pub struct GridObjectState {
-    pub pos: GridPos,
-    pub moved: bool,
-}
-
-impl GridObjectState {
-    pub fn new(x: usize, y: usize) -> Self {
-        Self {
-            pos: GridPos::new(x, y),
-            moved: false,
-        }
-    }
-}
-impl GridPos {
-    pub fn new(x: usize, y: usize) -> Self {
-        Self { x, y }
-    }
-
-    pub fn direction(self, d: input::Direction) -> Self {
-        use Direction::*;
-        match d {
-            Up => self.up(),
-            Down => self.down(),
-            Left => self.left(),
-            Right => self.right(),
-        }
-    }
-
-    pub fn up(self) -> Self {
-        Self {
-            x: self.x,
-            y: self.y + 1,
-        }
-    }
-
-    pub fn down(self) -> Self {
-        Self {
-            x: self.x,
-            y: self.y - 1,
-        }
-    }
-    pub fn left(self) -> Self {
-        Self {
-            x: self.x - 1,
-            y: self.y,
-        }
-    }
-    pub fn right(self) -> Self {
-        Self {
-            x: self.x + 1,
-            y: self.y,
-        }
-    }
-}
-
-impl Component for GridObjectState {
-    type Storage = DenseVecStorage<Self>;
-}
-
-#[derive(SystemDesc)]
-pub struct GridRulesSystem;
-
-impl GridRulesSystem {
-    pub fn init(world: &mut World, sprites: Handle<SpriteSheet>) {
+    pub fn init(&self, world: &mut World, sprites: Handle<SpriteSheet>) {
         let MapDescription { grid, start } =
             crate::map::MapDescription::load("./resources/map/01.txt".into()).unwrap();
         let mut entities = Grid::new(grid.width, grid.height);
@@ -193,35 +72,77 @@ impl GridRulesSystem {
         world.insert(state);
     }
 
-    pub fn deinit(world: &mut World) {
+    pub fn deinit(&self, world: &mut World) {
         let mut state = world.remove::<GridState>().expect("state initialized");
         {
-        let entities = world.entities();
+            let entities = world.entities();
 
-        for entity in state.entities.vals.drain(..) {
-            if let Some(entity) = entity {
-                entities.delete(entity).expect("delete should work");
+            for entity in state.entities.vals.drain(..) {
+                if let Some(entity) = entity {
+                    entities.delete(entity).expect("delete should work");
+                }
             }
-        }
         }
         world.maintain();
     }
-}
 
-impl<'s> System<'s> for GridRulesSystem {
-    type SystemData = (
-        Entities<'s>,
-        WriteStorage<'s, Transform>,
-        WriteStorage<'s, grid::GridObjectState>,
-        Read<'s, Time>,
-        Write<'s, GridState>,
-        Write<'s, input::InputState>,
-    );
-
-    fn run(
+    // move something from src_pos to dst_pos
+    // anything at dst_pos will be destroyed
+    fn move_grid_object_by_src_pos(
         &mut self,
-        (entitites, mut transforms, mut grid_objects, time, mut grid_map_state, mut input_state): Self::SystemData,
+        src_pos: GridPos,
+        dst_pos: GridPos,
+        storage: &mut WriteStorage<'_, GridObjectState>,
     ) {
+        let entity = self.entities.get_mut(src_pos).expect("entity be there");
+        let object = storage.get_mut(entity).expect("object be there");
+        self.move_grid_object(object, dst_pos);
+    }
+
+    fn move_grid_object(&mut self, grid_object: &mut GridObjectState, dst_pos: GridPos) {
+        let src_pos = grid_object.pos;
+
+        let entity = self
+            .entities
+            .get_mut(src_pos)
+            .take()
+            .expect("entity be there");
+
+        let dst_entity_mut_ref = self.entities.get_mut(dst_pos);
+        if let Some(dst_entity) = dst_entity_mut_ref.take() {
+            self.entities_pending_removal.push(dst_entity);
+        }
+        *dst_entity_mut_ref = Some(entity);
+
+        let src_type = self.tiles.get(src_pos);
+        *self.tiles.get_mut(src_pos) = TileType::Empty;
+        *self.tiles.get_mut(dst_pos) = src_type;
+        if self.player_pos == src_pos {
+            assert_eq!(src_type, TileType::Player);
+            self.player_pos = dst_pos;
+        }
+
+        grid_object.moved = true;
+        grid_object.pos = dst_pos;
+    }
+
+    pub fn run_tick(&mut self, world: &mut World) {
+        let (
+            entitites,
+            mut transforms,
+            mut grid_objects,
+            time,
+            mut grid_map_state,
+            mut input_state,
+        ): (
+            Entities,
+            WriteStorage<Transform>,
+            WriteStorage<grid::GridObjectState>,
+            Read<Time>,
+            Write<GridState>,
+            Write<input::InputState>,
+        ) = world.system_data();
+
         let do_grid_tick = grid_map_state
             .last_grid_tick
             .map(|last| Duration::from_millis(125) < time.absolute_time() - last)
@@ -363,6 +284,77 @@ impl<'s> System<'s> for GridRulesSystem {
     }
 }
 
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
+pub struct GridPos {
+    pub x: usize,
+    pub y: usize,
+}
+
+impl GridPos {
+    fn to_translation(self) -> Vector3<f32> {
+        Vector3::new(self.x as f32 * TILE_SIZE, self.y as f32 * TILE_SIZE, 0.)
+    }
+}
+
+#[derive(Default, Copy, Clone, Debug)]
+pub struct GridObjectState {
+    pub pos: GridPos,
+    pub moved: bool,
+}
+
+impl GridObjectState {
+    pub fn new(x: usize, y: usize) -> Self {
+        Self {
+            pos: GridPos::new(x, y),
+            moved: false,
+        }
+    }
+}
+impl GridPos {
+    pub fn new(x: usize, y: usize) -> Self {
+        Self { x, y }
+    }
+
+    pub fn direction(self, d: input::Direction) -> Self {
+        use Direction::*;
+        match d {
+            Up => self.up(),
+            Down => self.down(),
+            Left => self.left(),
+            Right => self.right(),
+        }
+    }
+
+    pub fn up(self) -> Self {
+        Self {
+            x: self.x,
+            y: self.y + 1,
+        }
+    }
+
+    pub fn down(self) -> Self {
+        Self {
+            x: self.x,
+            y: self.y - 1,
+        }
+    }
+    pub fn left(self) -> Self {
+        Self {
+            x: self.x - 1,
+            y: self.y,
+        }
+    }
+    pub fn right(self) -> Self {
+        Self {
+            x: self.x + 1,
+            y: self.y,
+        }
+    }
+}
+
+impl Component for GridObjectState {
+    type Storage = DenseVecStorage<Self>;
+}
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TileType {

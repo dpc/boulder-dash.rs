@@ -126,21 +126,13 @@ impl GridState {
         grid_object.pos = dst_pos;
     }
 
-    pub fn run_tick(&mut self, world: &mut World) {
-        let (
-            entitites,
-            mut transforms,
-            mut grid_objects,
-            time,
-            mut grid_map_state,
-            mut input_state,
-        ): (
+    pub fn run_tick(&mut self, world: &mut World, action: Vec<input::Action>) {
+        let (entitites, mut transforms, mut grid_objects, time, mut grid_map_state): (
             Entities,
             WriteStorage<Transform>,
             WriteStorage<grid::GridObjectState>,
             Read<Time>,
             Write<GridState>,
-            Write<input::InputState>,
         ) = world.system_data();
 
         let do_grid_tick = grid_map_state
@@ -228,7 +220,7 @@ impl GridState {
 
         debug_assert!(grid_map_state.tiles.get(player_pos).is_player());
 
-        for action in input_state.pop_action() {
+        for action in action {
             let dst_pos = player_pos.direction(action.direction);
             let dst_type = grid_map_state.tiles.get(dst_pos);
             if dst_type.is_empty() {

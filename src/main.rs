@@ -14,6 +14,7 @@ pub mod system;
 
 pub use system::*;
 mod grid;
+mod input;
 mod map;
 mod state;
 

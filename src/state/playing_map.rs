@@ -16,6 +16,7 @@ pub struct PlayingMap<'a, 'b> {
     sprites: Option<Handle<SpriteSheet>>,
     grid: grid::GridState,
     tick_count: u64,
+    input_tracker: input::InputTracker,
 }
 
 impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
@@ -34,13 +35,11 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
         let sprites = super::load_sprites(world);
         self.sprites = Some(sprites.clone());
         self.grid.init(world, sprites);
-        input::InputSystem::init(world);
         camera::CameraSystem::init(world, &dimensions);
 
         // Create the `DispatcherBuilder` and register some `System`s that should only run for this `State`.
         let mut dispatcher_builder = DispatcherBuilder::new();
 
-        dispatcher_builder.add(input::InputSystem, "own_input_system", &[]);
         dispatcher_builder.add(camera::CameraSystem::default(), "camera_system", &[]);
         // Build and setup the `Dispatcher`.
         let mut dispatcher = dispatcher_builder.build();
@@ -66,7 +65,8 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
     fn fixed_update(&mut self, mut data: StateData<'_, GameData<'_, '_>>) -> SimpleTrans {
         self.tick_count += 1;
         if self.tick_count % 8 == 0 {
-            self.grid.run_tick(&mut data.world);
+            self.grid
+                .run_tick(&mut data.world, self.input_tracker.pop_action());
         }
 
         SimpleTrans::None
@@ -103,7 +103,7 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
                             .down();
                         data.world.insert(zoom);
                     }
-                    _ => {}
+                    event => self.input_tracker.handle_key(event),
                 }
             }
 

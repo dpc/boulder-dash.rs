@@ -5,8 +5,6 @@ use amethyst::{
 
 use super::PlayingMap;
 
-use log::info;
-
 pub struct MainScreen;
 
 impl SimpleState for MainScreen {
@@ -23,7 +21,6 @@ impl SimpleState for MainScreen {
 
             // Listen to any key events
             if let Some(event) = get_key(&event) {
-                info!("handling key event: {:?}", event);
                 match event {
                     (_, ElementState::Pressed) => {
                         return Trans::Push(Box::new(PlayingMap::default()))

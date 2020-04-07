@@ -8,7 +8,6 @@ use amethyst::{
 };
 
 use crate::{camera, grid, input};
-use log::info;
 
 #[derive(Default)]
 pub struct PlayingMap<'a, 'b> {
@@ -85,7 +84,6 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
 
             // Listen to any key events
             if let Some(event) = get_key(&event) {
-                info!("handling key event: {:?}", event);
                 match event {
                     (VirtualKeyCode::R, ElementState::Pressed) => {
                         self.restart_map(&mut data.world);

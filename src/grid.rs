@@ -1,15 +1,16 @@
 use crate::grid;
 use amethyst::{
     assets::Handle,
-    core::math::Vector3,
-    core::Transform,
+    core::{math::Vector3, Transform},
     ecs::{prelude::*, world::Entities, Entity, Join, World, Write, WriteStorage},
     renderer::{SpriteRender, SpriteSheet},
 };
 
-use crate::input::{self, Direction};
-use crate::map::MapDescription;
-use crate::TILE_SIZE;
+use crate::{
+    input::{self, Direction},
+    map::MapDescription,
+    TILE_SIZE,
+};
 
 #[derive(Default)]
 pub struct GridState {

@@ -2,8 +2,7 @@ mod main_screen;
 mod playing_map;
 
 use amethyst::{
-    assets::Handle,
-    assets::{AssetStorage, Loader},
+    assets::{AssetStorage, Handle, Loader},
     ecs::prelude::*,
     renderer::{ImageFormat, SpriteSheet, SpriteSheetFormat, Texture},
 };

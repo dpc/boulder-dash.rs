@@ -1,15 +1,12 @@
 use amethyst::{
-    core::transform::Transform,
-    core::SystemDesc,
-    core::Time,
+    core::{transform::Transform, SystemDesc, Time},
     derive::SystemDesc,
     ecs::{prelude::*, Read, System, SystemData, World, WriteStorage},
     renderer::Camera,
     window::ScreenDimensions,
 };
 
-use crate::grid;
-use crate::TILE_SIZE;
+use crate::{grid, TILE_SIZE};
 
 #[derive(Debug, Copy, Clone)]
 pub struct ZoomLevel(f32);

@@ -1,7 +1,9 @@
 use anyhow::{bail, format_err, Result};
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::PathBuf,
+};
 
 use crate::grid::{GridPos, TileType, TileTypeGrid};
 

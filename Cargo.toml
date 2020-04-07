@@ -1,7 +1,7 @@
 [package]
 name = "bd"
 version = "0.1.0"
-authors = ["Hilmar Wiegand <me@hwgnd.de>"]
+authors = ["Dawid Ciężarkiewicz"]
 edition = "2018"
 
 [dependencies]
@@ -19,5 +19,5 @@ nightly = ["amethyst/nightly"]
 [profile.dev]
 opt-level = 1
 lto = false
-debug = true
+debug = false
 incremental = true

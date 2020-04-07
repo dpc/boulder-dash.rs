@@ -5,9 +5,22 @@ use amethyst::{
 
 use super::PlayingMap;
 
-pub struct MainScreen;
+#[derive(Default)]
+pub struct MainScreen {
+    started: bool,
+}
 
 impl SimpleState for MainScreen {
+    // until we have a functional full-screen menu, just jump into the game
+    fn update(&mut self, _data: &mut StateData<'_, GameData<'_, '_>>) -> SimpleTrans {
+        if !self.started {
+            self.started = true;
+            Trans::Push(Box::new(PlayingMap::default()))
+        } else {
+            Trans::Quit
+        }
+    }
+
     fn handle_event(
         &mut self,
         _data: StateData<'_, GameData<'_, '_>>,

@@ -43,7 +43,7 @@ fn main() -> amethyst::Result<()> {
                 .with_plugin(RenderFlat2D::default()),
         )?;
 
-    let mut game = Application::new(resources, state::MainScreen, game_data)?;
+    let mut game = Application::new(resources, state::MainScreen::default(), game_data)?;
     game.run();
 
     Ok(())

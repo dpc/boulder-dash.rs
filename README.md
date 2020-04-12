@@ -21,6 +21,22 @@ Use -/+ for zoom level, arrows to move.
 I actually don't have a lot of time to work on it myself, so I'd mostly be a
 sidekick, I guess.
 
+## Install
+
+### Ubuntu
+
+```
+sudo apt-get install libxcb-shape0-dev libxcb-xfixes0-dev mesa-vulkan-drivers
+```
+
+Note: If you have an Nvidia GPU instead of `mesa-vulkan-drivers` you will need:
+
+```
+sudo add-apt-repository ppa:graphics-drivers/ppa
+sudo apt update
+sudo apt install libvulkan1
+```
+
 ## Goals & ideas
 
 * Add animation and sound

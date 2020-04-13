@@ -5,10 +5,13 @@ use std::{
     path::PathBuf,
 };
 
-use crate::grid::{GridPos, TileType, TileTypeGrid};
+use crate::grid::{GridPos, TileType};
 
+#[derive(Debug, Clone)]
 pub struct MapDescription {
-    pub grid: TileTypeGrid,
+    pub tiles: Vec<TileType>,
+    pub width: usize,
+    pub height: usize,
     pub start: GridPos,
 }
 
@@ -22,8 +25,7 @@ impl MapDescription {
         let lines = lines?;
         let width = lines[0].len();
         let height = lines.len();
-
-        let mut grid = TileTypeGrid::new(width, height);
+        let mut tiles = Vec::with_capacity(width * height);
 
         for (y, line) in lines.iter().rev().enumerate() {
             if width != line.len() {
@@ -31,30 +33,28 @@ impl MapDescription {
             }
 
             for (x, ch) in line.chars().enumerate() {
-                let pos = GridPos::new(x, y);
-                grid.set(
-                    pos,
-                    match ch {
-                        's' => {
-                            if start.is_some() {
-                                bail!("Multiple starting positions found");
-                            }
-                            start = Some(pos);
-                            TileType::Player
+                tiles.push(match ch {
+                    's' => {
+                        if start.is_some() {
+                            bail!("Multiple starting positions found");
                         }
-                        '#' => TileType::Steel,
-                        '%' => TileType::Wall,
-                        '.' => TileType::Dirt,
-                        'o' => TileType::Rock,
-                        '*' => TileType::Diamond,
-                        _ => TileType::Empty,
-                    },
-                );
+                        start = Some(GridPos::from_xy(x, y, width));
+                        TileType::Player
+                    }
+                    '#' => TileType::Steel,
+                    '%' => TileType::Wall,
+                    '.' => TileType::Dirt,
+                    'o' => TileType::Rock,
+                    '*' => TileType::Diamond,
+                    _ => TileType::Empty,
+                });
             }
         }
 
         Ok(MapDescription {
-            grid,
+            tiles,
+            width,
+            height,
             start: start.ok_or_else(|| format_err!("No start position found"))?,
         })
     }

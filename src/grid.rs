@@ -1,351 +1,59 @@
-use crate::grid;
-use amethyst::{
-    assets::Handle,
-    core::{math::Vector3, Transform},
-    ecs::{prelude::*, world::Entities, Entity, Join, World, Write, WriteStorage},
-    renderer::{SpriteRender, SpriteSheet},
-};
-
 use crate::{
     input::{self, Direction},
     map::MapDescription,
-    TILE_SIZE,
 };
 
-#[derive(Default)]
-pub struct GridState {
-    pub tiles_prev: TileTypeGrid,
-    pub tiles: TileTypeGrid,
-    pub entities: Grid<Option<Entity>>,
-    pub sprites: Option<Handle<SpriteSheet>>,
-    pub player_pos: GridPos,
-
-    pub entities_pending_removal: Vec<Entity>,
-
-    pub diamond_count: usize,
-}
-
-impl GridState {
-    pub fn init(&self, world: &mut World, sprites: Handle<SpriteSheet>) {
-        let MapDescription { grid, start } =
-            crate::map::MapDescription::load("./resources/map/01.txt".into()).unwrap();
-        let mut entities = Grid::new(grid.width, grid.height);
-
-        world.register::<grid::GridObjectState>();
-        for y in 0..grid.height {
-            for x in 0..grid.width {
-                let pos = GridPos { x, y };
-                let t = grid.get(pos);
-                if let Some(sprite_number) = t.to_sprite_number() {
-                    let sprite_render = SpriteRender {
-                        sprite_sheet: sprites.clone(),
-                        sprite_number,
-                    };
-
-                    let mut transform = Transform::default();
-                    transform.set_translation(pos.to_translation());
-                    transform.set_scale(Vector3::new(TILE_SIZE / 32., TILE_SIZE / 32., 1.));
-                    let entity = world
-                        .create_entity()
-                        .with(sprite_render)
-                        .with(GridObjectState::new(x, y))
-                        .with(transform)
-                        .build();
-
-                    entities.set(pos, Some(entity));
-                }
-            }
-        }
-
-        let state = GridState {
-            entities,
-            tiles_prev: grid.clone(),
-            tiles: grid,
-            sprites: Some(sprites),
-            player_pos: start,
-            entities_pending_removal: vec![],
-            ..GridState::default()
-        };
-        world.insert(state);
-    }
-
-    pub fn deinit(&self, world: &mut World) {
-        let mut state = world.remove::<GridState>().expect("state initialized");
-        {
-            let entities = world.entities();
-
-            for entity in state.entities.vals.drain(..) {
-                if let Some(entity) = entity {
-                    entities.delete(entity).expect("delete should work");
-                }
-            }
-        }
-        world.maintain();
-    }
-
-    // move something from src_pos to dst_pos
-    // anything at dst_pos will be destroyed
-    fn move_grid_object_by_src_pos(
-        &mut self,
-        src_pos: GridPos,
-        dst_pos: GridPos,
-        storage: &mut WriteStorage<'_, GridObjectState>,
-    ) {
-        let entity = self.entities.get_mut(src_pos).expect("entity be there");
-        let object = storage.get_mut(entity).expect("object be there");
-        self.move_grid_object(object, dst_pos);
-    }
-
-    fn move_grid_object(&mut self, grid_object: &mut GridObjectState, dst_pos: GridPos) {
-        let src_pos = grid_object.pos;
-
-        let entity = self
-            .entities
-            .get_mut(src_pos)
-            .take()
-            .expect("entity be there");
-
-        let dst_entity_mut_ref = self.entities.get_mut(dst_pos);
-        if let Some(dst_entity) = dst_entity_mut_ref.take() {
-            self.entities_pending_removal.push(dst_entity);
-        }
-        *dst_entity_mut_ref = Some(entity);
-
-        let src_type = self.tiles.get(src_pos);
-        *self.tiles.get_mut(src_pos) = TileType::Empty;
-        *self.tiles.get_mut(dst_pos) = src_type;
-        if self.player_pos == src_pos {
-            assert_eq!(src_type, TileType::Player);
-            self.player_pos = dst_pos;
-        }
-
-        grid_object.moved = true;
-        grid_object.pos = dst_pos;
-    }
-
-    pub fn run_tick(&mut self, world: &mut World, action: Vec<input::Action>) {
-        let (entitites, mut transforms, mut grid_objects, mut grid_map_state): (
-            Entities,
-            WriteStorage<Transform>,
-            WriteStorage<grid::GridObjectState>,
-            Write<GridState>,
-        ) = world.system_data();
-
-        // handle player
-        {
-            let player_pos = grid_map_state.player_pos;
-
-            debug_assert!(grid_map_state.tiles.get(player_pos).is_player());
-
-            for action in action {
-                let dst_pos = player_pos.direction(action.direction);
-                let dst_type = grid_map_state.tiles.get(dst_pos);
-                if dst_type.is_empty() {
-                    grid_map_state.move_grid_object_by_src_pos(
-                        player_pos,
-                        dst_pos,
-                        &mut grid_objects,
-                    );
-                    break;
-                }
-                if dst_type.is_dirt() {
-                    grid_map_state.move_grid_object_by_src_pos(
-                        player_pos,
-                        dst_pos,
-                        &mut grid_objects,
-                    );
-                    break;
-                }
-                if dst_type.is_diamond() {
-                    grid_map_state.move_grid_object_by_src_pos(
-                        player_pos,
-                        dst_pos,
-                        &mut grid_objects,
-                    );
-                    grid_map_state.diamond_count += 1;
-                    break;
-                }
-                if dst_type.can_be_pushed() {
-                    let past_dst_pos = dst_pos.direction(action.direction);
-                    let past_dst_type = grid_map_state.tiles.get(past_dst_pos);
-                    if past_dst_type.is_empty() {
-                        grid_map_state.move_grid_object_by_src_pos(
-                            dst_pos,
-                            past_dst_pos,
-                            &mut grid_objects,
-                        );
-                        grid_map_state.move_grid_object_by_src_pos(
-                            player_pos,
-                            dst_pos,
-                            &mut grid_objects,
-                        );
-                        break;
-                    }
-                }
-            }
-        }
-        // objects falling straight down
-        for object in (&mut grid_objects).join() {
-            let GridState {
-                ref tiles_prev,
-                ref mut tiles,
-                ..
-            } = *grid_map_state;
-
-            let type_ = tiles.get(object.pos);
-
-            if !type_.can_fall() {
-                continue;
-            }
-
-            let pos_below = object.pos.down();
-            let type_below = tiles.get(pos_below);
-            let type_below_prev = tiles_prev.get(pos_below);
-            if type_below.is_empty() && type_below_prev.is_empty() {
-                grid_map_state.move_grid_object(object, pos_below);
-            }
-        }
-
-        // objects rolling to sides
-        for object in (&mut grid_objects).join() {
-            if object.moved {
-                continue;
-            }
-
-            let GridState {
-                ref tiles_prev,
-                ref mut tiles,
-                ..
-            } = *grid_map_state;
-
-            let type_ = tiles.get(object.pos);
-
-            if !type_.can_fall() {
-                continue;
-            }
-
-            let pos_below = object.pos.down();
-
-            let type_below = tiles.get(pos_below);
-            if !type_below.can_roll_on_top() {
-                continue;
-            }
-
-            let pos_left = object.pos.left();
-            let pos_left_down = pos_left.down();
-            let pos_right = object.pos.right();
-            let pos_right_down = pos_right.down();
-            let left_free = tiles.get(pos_left).is_empty()
-                && tiles_prev.get(pos_left).is_empty()
-                && tiles.get(pos_left_down).is_empty()
-                && tiles_prev.get(pos_left_down).is_empty();
-            let right_free = tiles.get(pos_right).is_empty()
-                && tiles_prev.get(pos_right).is_empty()
-                && tiles.get(pos_right_down).is_empty()
-                && tiles_prev.get(pos_right_down).is_empty();
-
-            if let Some(dst_pos) = match (left_free, right_free) {
-                (true, true) => Some(pos_left), // TODO: randomize?
-                (true, false) => Some(pos_left),
-                (false, true) => Some(pos_right),
-                (false, false) => None,
-            } {
-                grid_map_state.move_grid_object(object, dst_pos);
-            }
-        }
-
-        for entity in grid_map_state.entities_pending_removal.drain(..) {
-            entitites.delete(entity).expect("not to fail");
-        }
-
-        for (object, transform) in (&mut grid_objects, &mut transforms).join() {
-            if !object.moved {
-                continue;
-            }
-
-            object.moved = false;
-            transform.set_translation(object.pos.to_translation());
-        }
-        let GridState {
-            ref mut tiles_prev,
-            ref mut tiles,
-            ..
-        } = *grid_map_state;
-        tiles_prev.copy_from(&tiles);
-    }
-}
-
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
-pub struct GridPos {
-    pub x: usize,
-    pub y: usize,
-}
+pub struct GridPos(usize);
 
+/*
 impl GridPos {
     fn to_translation(self) -> Vector3<f32> {
         Vector3::new(self.x as f32 * TILE_SIZE, self.y as f32 * TILE_SIZE, 0.)
     }
 }
+*/
 
-#[derive(Default, Copy, Clone, Debug)]
-pub struct GridObjectState {
-    pub pos: GridPos,
-    pub moved: bool,
-}
-
-impl GridObjectState {
-    pub fn new(x: usize, y: usize) -> Self {
-        Self {
-            pos: GridPos::new(x, y),
-            moved: false,
-        }
-    }
-}
 impl GridPos {
-    pub fn new(x: usize, y: usize) -> Self {
-        Self { x, y }
+    pub fn new(i: usize) -> Self {
+        Self(i)
     }
 
-    pub fn direction(self, d: input::Direction) -> Self {
+    pub fn from_xy(x: usize, y: usize, width: usize) -> Self {
+        Self(x + y * width)
+    }
+
+    pub fn direction(self, d: input::Direction, widht: usize) -> Self {
         use Direction::*;
         match d {
-            Up => self.up(),
-            Down => self.down(),
+            Up => self.up(widht),
+            Down => self.down(widht),
             Left => self.left(),
             Right => self.right(),
         }
     }
+    pub fn to_xy(self, width: usize) -> (usize, usize) {
+        let x = self.0 % width;
+        let y = self.0 / width;
 
-    pub fn up(self) -> Self {
-        Self {
-            x: self.x,
-            y: self.y + 1,
-        }
+        (x, y)
     }
 
-    pub fn down(self) -> Self {
-        Self {
-            x: self.x,
-            y: self.y - 1,
-        }
+    pub fn up(self, width: usize) -> Self {
+        Self(self.0 + width)
+    }
+
+    pub fn down(self, width: usize) -> Self {
+        Self(self.0 - width)
     }
     pub fn left(self) -> Self {
-        Self {
-            x: self.x - 1,
-            y: self.y,
-        }
+        Self(self.0 - 1)
     }
     pub fn right(self) -> Self {
-        Self {
-            x: self.x + 1,
-            y: self.y,
-        }
+        Self(self.0 + 1)
     }
 }
 
-impl Component for GridObjectState {
-    type Storage = DenseVecStorage<Self>;
-}
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TileType {
@@ -365,7 +73,7 @@ impl Default for TileType {
 }
 
 impl TileType {
-    fn to_sprite_number(self) -> Option<usize> {
+    pub fn to_sprite_number(self) -> Option<usize> {
         use TileType::*;
         Some(match self {
             Empty => return None,
@@ -434,27 +142,39 @@ impl TileType {
         }
     }
 }
-
-pub type TileTypeGrid = Grid<TileType>;
-
 #[derive(Default, Clone)]
-pub struct Grid<T> {
+pub struct GridState {
     height: usize,
     width: usize,
-    vals: Vec<T>,
+    pub tiles: Vec<TileType>,
+    pub moved: Vec<bool>,
+
+    pub player_pos: GridPos,
+
+    // TODO: move?
+    pub diamond_count: usize,
 }
 
-impl<T> Grid<T>
-where
-    T: Clone + Default,
-{
-    pub fn new(width: usize, height: usize) -> Self {
-        Self {
-            width,
+impl GridState {
+    pub fn new() -> Self {
+        let MapDescription {
             height,
-            vals: vec![Default::default(); width * height],
+            width,
+            tiles,
+            start,
+        } = crate::map::MapDescription::load("./resources/map/01.txt".into())
+            .expect("map should load");
+
+        GridState {
+            moved: vec![false; tiles.len()],
+            height,
+            width,
+            tiles,
+            player_pos: start,
+            ..GridState::default()
         }
     }
+
     pub fn height(&self) -> usize {
         self.height
     }
@@ -463,30 +183,170 @@ where
         self.width
     }
 
-    pub fn get(&self, pos: GridPos) -> T {
-        self.get_ref(pos).clone()
+    pub fn get_tile(&self, pos: GridPos) -> TileType {
+        *self.get_tile_ref(pos)
     }
 
-    pub fn set(&mut self, pos: GridPos, v: T) {
-        *self.get_mut(pos) = v;
+    pub fn set_tile(&mut self, pos: GridPos, v: TileType) {
+        *self.get_tile_mut(pos) = v;
     }
 
-    pub fn get_ref(&self, pos: GridPos) -> &T {
-        &self.vals[pos.x + pos.y * self.width]
+    pub fn get_tile_ref(&self, pos: GridPos) -> &TileType {
+        &self.tiles[pos.0]
     }
-    pub fn get_mut(&mut self, pos: GridPos) -> &mut T {
-        &mut self.vals[pos.x + pos.y * self.width]
+    pub fn get_tile_mut(&mut self, pos: GridPos) -> &mut TileType {
+        &mut self.tiles[pos.0]
     }
-}
+    pub fn get_moved_mut(&mut self, pos: GridPos) -> &mut bool {
+        &mut self.moved[pos.0]
+    }
 
-impl<T> Grid<T>
-where
-    T: Copy,
-{
-    fn copy_from(&mut self, other: &Self) {
-        debug_assert_eq!(self.width, other.width);
-        debug_assert_eq!(self.height, other.height);
+    pub fn get_moved(&mut self, pos: GridPos) -> bool {
+        self.moved[pos.0]
+    }
 
-        self.vals[..].copy_from_slice(&other.vals);
+    pub fn set_moved(&mut self, pos: GridPos, moved: bool) {
+        self.moved[pos.0] = moved;
+    }
+
+    fn move_grid_object_if_unmoved(&mut self, src_pos: GridPos, dst_pos: GridPos) {
+        if !self.get_moved(src_pos) && !self.get_moved(dst_pos) {
+            self.move_grid_object(src_pos, dst_pos);
+        }
+    }
+
+    // move something from src_pos to dst_pos
+    // anything at dst_pos will be destroyed
+    fn move_grid_object(&mut self, src_pos: GridPos, dst_pos: GridPos) {
+        let src_type = self.get_tile(src_pos);
+        self.set_tile(src_pos, TileType::Empty);
+        self.set_moved(src_pos, true);
+        self.set_tile(dst_pos, src_type);
+        self.set_moved(dst_pos, true);
+
+        if self.player_pos == src_pos {
+            assert_eq!(src_type, TileType::Player);
+            self.player_pos = dst_pos;
+        }
+    }
+
+    pub fn clean_moved_state(&mut self) {
+        for moved in self.moved.iter_mut() {
+            *moved = false;
+        }
+    }
+
+    fn move_player(&mut self, action: Vec<input::Action>) {
+        let player_pos = self.player_pos;
+
+        debug_assert!(self.get_tile(self.player_pos).is_player());
+
+        for action in action {
+            let dst_pos = player_pos.direction(action.direction, self.width);
+            let dst_type = self.get_tile(dst_pos);
+            if dst_type.is_empty() {
+                self.move_grid_object(player_pos, dst_pos);
+                break;
+            }
+            if dst_type.is_dirt() {
+                self.move_grid_object(player_pos, dst_pos);
+                break;
+            }
+            if dst_type.is_diamond() {
+                self.move_grid_object(player_pos, dst_pos);
+                self.diamond_count += 1;
+                break;
+            }
+            if dst_type.can_be_pushed() {
+                let past_dst_pos = dst_pos.direction(action.direction, self.width);
+                let past_dst_type = self.get_tile(past_dst_pos);
+                if past_dst_type.is_empty() {
+                    self.move_grid_object(dst_pos, past_dst_pos);
+                    self.move_grid_object(player_pos, dst_pos);
+                    break;
+                }
+            }
+        }
+    }
+
+    fn move_things_rolling_to_sides(&mut self) {
+        for i in 0..self.tiles.len() {
+            let pos = GridPos(i);
+
+            if self.get_moved(pos) {
+                continue;
+            }
+            let type_ = self.get_tile(pos);
+
+            if !type_.can_fall() {
+                continue;
+            }
+
+            let pos_below = pos.down(self.width);
+
+            let type_below = self.get_tile(pos_below);
+            if !type_below.can_roll_on_top() {
+                continue;
+            }
+
+            let pos_left = pos.left();
+            let pos_left_down = pos_left.down(self.width);
+            let pos_right = pos.right();
+            let pos_right_down = pos_right.down(self.width);
+            let left_free =
+                self.get_tile(pos_left).is_empty() && self.get_tile(pos_left_down).is_empty();
+            let right_free =
+                self.get_tile(pos_right).is_empty() && self.get_tile(pos_right_down).is_empty();
+
+            if let Some(dst_pos) = match (left_free, right_free) {
+                (true, true) => Some(pos_left), // TODO: randomize?
+                (true, false) => Some(pos_left),
+                (false, true) => Some(pos_right),
+                (false, false) => None,
+            } {
+                self.move_grid_object_if_unmoved(pos, dst_pos);
+            }
+        }
+    }
+
+    fn move_things_falling_down(&mut self) {
+        for i in 0..self.tiles.len() {
+            let pos = GridPos(i);
+            let type_ = self.get_tile(pos);
+
+            if !type_.can_fall() {
+                continue;
+            }
+
+            let pos_below = pos.down(self.width);
+            let type_below = self.get_tile(pos_below);
+            if type_below.is_empty() {
+                self.move_grid_object_if_unmoved(pos, pos_below);
+            }
+        }
+    }
+
+    pub fn run_tick(&mut self, action: Vec<input::Action>) {
+        self.clean_moved_state();
+        self.move_player(action);
+        self.move_things_rolling_to_sides();
+        self.move_things_falling_down();
+
+        /*
+            for (object, transform) in (&mut grid_objects, &mut transforms).join() {
+                if !object.moved {
+                    continue;
+                }
+
+                object.moved = false;
+                transform.set_translation(object.pos.to_translation());
+            }
+            let GridState {
+                ref mut tiles_prev,
+                ref mut tiles,
+                ..
+            } = *self;
+            tiles_prev.copy_from(&tiles);
+        */
     }
 }

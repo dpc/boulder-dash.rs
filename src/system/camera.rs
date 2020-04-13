@@ -99,15 +99,21 @@ impl<'s> System<'s> for CameraSystem {
         let padding_x = camera_w / 2.;
         let padding_y = camera_h / 2.;
 
+        let (player_x, player_y) = if grid_map_state.width() == 0 {
+            (0, 0)
+        } else {
+            grid_map_state.player_pos.to_xy(grid_map_state.width())
+        };
+
         let desired_x = clamp(
-            grid_map_state.player_pos.x as f32 * TILE_SIZE,
+            player_x as f32 * TILE_SIZE,
             padding_x,
-            (grid_map_state.tiles.width().saturating_sub(1) as f32 * TILE_SIZE) - padding_x,
+            (grid_map_state.width().saturating_sub(1) as f32 * TILE_SIZE) - padding_x,
         );
         let desired_y = clamp(
-            grid_map_state.player_pos.y as f32 * TILE_SIZE,
+            player_y as f32 * TILE_SIZE,
             padding_y,
-            (grid_map_state.tiles.height().saturating_sub(1) as f32 * TILE_SIZE) - padding_y,
+            (grid_map_state.height().saturating_sub(1) as f32 * TILE_SIZE) - padding_y,
         );
 
         let desired_camera = Camera::standard_2d(camera_w, camera_h);

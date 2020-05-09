@@ -1,15 +1,14 @@
 use amethyst::{
     assets::Handle,
     core::{math::Vector3, Transform},
-    ecs::prelude::*,
-    ecs::NullStorage,
+    ecs::{prelude::*, NullStorage},
     input::{get_key, is_close_requested, is_key_down, ElementState, VirtualKeyCode},
     prelude::*,
     renderer::{SpriteRender, SpriteSheet},
     window::ScreenDimensions,
 };
 
-use crate::{camera, grid, input};
+use crate::{camera, grid, input, score};
 
 #[derive(Default)]
 pub struct PlayingMap<'a, 'b> {
@@ -36,12 +35,16 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
         // Load our sprites and display them
         let sprites = super::load_sprites(world);
         self.sprites = Some(sprites);
+
+        score::initialise_scoreboard(world);
+
         camera::CameraSystem::init(world, &dimensions);
 
         // Create the `DispatcherBuilder` and register some `System`s that should only run for this `State`.
         let mut dispatcher_builder = DispatcherBuilder::new();
 
         dispatcher_builder.add(camera::CameraSystem::default(), "camera_system", &[]);
+        dispatcher_builder.add(score::ScoreSystem::default(), "score_system", &[]);
         // Build and setup the `Dispatcher`.
         let mut dispatcher = dispatcher_builder.build();
         dispatcher.setup(world);
@@ -49,7 +52,9 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
         self.dispatcher = Some(dispatcher);
     }
 
-    fn on_stop(&mut self, _data: StateData<'_, GameData<'_, '_>>) {}
+    fn on_stop(&mut self, _data: StateData<'_, GameData<'_, '_>>) {
+        score::clear_scoreboard(_data.world);
+    }
 
     fn update(&mut self, data: &mut StateData<'_, GameData<'_, '_>>) -> SimpleTrans {
         if let Some(dispatcher) = self.dispatcher.as_mut() {
@@ -75,7 +80,7 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
 
     fn handle_event(
         &mut self,
-        mut data: StateData<'_, GameData<'_, '_>>,
+        data: StateData<'_, GameData<'_, '_>>,
         event: StateEvent,
     ) -> SimpleTrans {
         if let StateEvent::Window(event) = &event {
@@ -88,7 +93,7 @@ impl<'a, 'b> SimpleState for PlayingMap<'a, 'b> {
             if let Some(event) = get_key(&event) {
                 match event {
                     (VirtualKeyCode::R, ElementState::Pressed) => {
-                        self.restart_map(&mut data.world);
+                        return Trans::Switch(Box::new(PlayingMap::default()));
                     }
                     (VirtualKeyCode::Add, ElementState::Pressed)
                     | (VirtualKeyCode::Equals, ElementState::Pressed) => {
@@ -125,10 +130,6 @@ impl Component for GridSprite {
 }
 
 impl<'a, 'b> PlayingMap<'a, 'b> {
-    fn restart_map(&mut self, world: &mut World) {
-        world.insert(grid::GridState::new());
-    }
-
     fn clear_grid(&mut self, data: &mut StateData<'_, GameData<'_, '_>>) {
         let world = &mut data.world;
         {

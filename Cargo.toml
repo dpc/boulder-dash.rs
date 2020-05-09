@@ -11,6 +11,7 @@ readme = "README.md"
 amethyst = "0.13.0"
 log = { version = "0.4.8", features = ["serde"] }
 anyhow = "*"
+rand = "0.7.3"
 
 [features]
 default = ["vulkan"]

@@ -1,8 +1,7 @@
 use amethyst::{
     assets::Handle,
     core::{math::Vector3, Transform},
-    ecs::prelude::*,
-    ecs::NullStorage,
+    ecs::{prelude::*, NullStorage},
     input::{get_key, is_close_requested, is_key_down, ElementState, VirtualKeyCode},
     prelude::*,
     renderer::{SpriteRender, SpriteSheet},

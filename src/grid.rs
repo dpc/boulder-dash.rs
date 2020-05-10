@@ -25,15 +25,16 @@ impl GridPos {
         Self(x + y * width)
     }
 
-    pub fn direction(self, d: input::Direction, widht: usize) -> Self {
+    pub fn direction(self, d: input::Direction, width: usize) -> Self {
         use Direction::*;
         match d {
-            Up => self.up(widht),
-            Down => self.down(widht),
+            Up => self.up(width),
+            Down => self.down(width),
             Left => self.left(),
             Right => self.right(),
         }
     }
+
     pub fn to_xy(self, width: usize) -> (usize, usize) {
         let x = self.0 % width;
         let y = self.0 / width;
@@ -56,6 +57,12 @@ impl GridPos {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Tile {
+    pos: GridPos,
+    kind: TileType,
+}
+
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TileType {
@@ -66,6 +73,10 @@ pub enum TileType {
     Wall,
     Diamond,
     Steel,
+    Creature {
+        counter: usize,
+        direction: Direction,
+    },
 }
 
 impl Default for TileType {
@@ -85,6 +96,10 @@ impl TileType {
             Steel => 4,
             Wall => 5,
             Diamond => 6,
+            Creature {
+                counter: _,
+                direction: _,
+            } => 7,
         })
     }
 
@@ -97,12 +112,30 @@ impl TileType {
         }
     }
 
-    fn can_roll_on_top(self) -> bool {
+    fn can_be_rolled_on(self) -> bool {
         use TileType::*;
         match self {
             Rock => true,
             Diamond => true,
             Wall => true,
+            _ => false,
+        }
+    }
+
+    fn can_be_bounced_on(self) -> bool {
+        use TileType::*;
+        match self {
+            Player => false,
+            _ => true,
+        }
+    }
+
+    fn can_be_stepped_on(self) -> bool {
+        use TileType::*;
+        match self {
+            Empty => true,
+            Dirt => true,
+            Diamond => true,
             _ => false,
         }
     }
@@ -123,14 +156,6 @@ impl TileType {
         }
     }
 
-    fn is_dirt(self) -> bool {
-        use TileType::*;
-        match self {
-            Dirt => true,
-            _ => false,
-        }
-    }
-
     fn is_diamond(self) -> bool {
         use TileType::*;
         match self {
@@ -147,12 +172,12 @@ impl TileType {
         }
     }
 }
+
 #[derive(Default, Clone)]
 pub struct GridState {
     height: usize,
     width: usize,
     pub tiles: Vec<TileType>,
-    pub moved: Vec<bool>,
 
     pub player_pos: GridPos,
 
@@ -171,7 +196,6 @@ impl GridState {
             .expect("map should load");
 
         GridState {
-            moved: vec![false; tiles.len()],
             height,
             width,
             tiles,
@@ -192,6 +216,15 @@ impl GridState {
         *self.get_tile_ref(pos)
     }
 
+    pub fn get_tile_relative(&self, pos: GridPos, direction: Direction) -> Tile {
+        let dst_pos = pos.direction(direction, self.width);
+        let dst_type = self.get_tile(dst_pos);
+        Tile {
+            pos: dst_pos,
+            kind: dst_type,
+        }
+    }
+
     pub fn set_tile(&mut self, pos: GridPos, v: TileType) {
         *self.get_tile_mut(pos) = v;
     }
@@ -202,22 +235,57 @@ impl GridState {
     pub fn get_tile_mut(&mut self, pos: GridPos) -> &mut TileType {
         &mut self.tiles[pos.0]
     }
-    pub fn get_moved_mut(&mut self, pos: GridPos) -> &mut bool {
-        &mut self.moved[pos.0]
-    }
 
-    pub fn get_moved(&mut self, pos: GridPos) -> bool {
-        self.moved[pos.0]
-    }
+    pub fn run_tick(&mut self, action: Vec<input::Action>) {
+        self.move_player(action);
 
-    pub fn set_moved(&mut self, pos: GridPos, moved: bool) {
-        self.moved[pos.0] = moved;
-    }
-
-    fn move_grid_object_if_unmoved(&mut self, src_pos: GridPos, dst_pos: GridPos) {
-        if !self.get_moved(src_pos) && !self.get_moved(dst_pos) {
-            self.move_grid_object(src_pos, dst_pos);
+        for i in 0..self.tiles.len() {
+            let pos = GridPos(i);
+            if let Some(new_tile) = self.run_tick_for_pos(pos) {
+                self.move_grid_object(pos, new_tile.pos);
+                // sometimes the tick will change the kind (i.e. creature direction / counter)
+                self.set_tile(new_tile.pos, new_tile.kind);
+            }
         }
+    }
+
+    // return the new position of the tile, or none if it didn't move
+    fn run_tick_for_pos(&mut self, current_pos: GridPos) -> Option<Tile> {
+        let tile = self.get_tile(current_pos);
+        if tile.can_fall() {
+            if let Some(new_pos) = self.try_roll(current_pos) {
+                return Some(Tile {
+                    pos: new_pos,
+                    kind: tile,
+                });
+            }
+
+            if let Some(new_pos) = self.try_fall(current_pos) {
+                return Some(Tile {
+                    pos: new_pos,
+                    kind: tile,
+                });
+            }
+        }
+
+        if let TileType::Creature { counter, direction } = tile {
+            // counter just to slow down movement of the creatures
+            if counter % 3 == 2 {
+                if let Some(new_tile) = self.try_creature_move(current_pos, direction) {
+                    return Some(new_tile);
+                }
+            } else {
+                return Some(Tile {
+                    pos: current_pos,
+                    kind: TileType::Creature {
+                        counter: counter + 1,
+                        direction: direction,
+                    },
+                });
+            }
+        }
+
+        None
     }
 
     // move something from src_pos to dst_pos
@@ -225,19 +293,11 @@ impl GridState {
     fn move_grid_object(&mut self, src_pos: GridPos, dst_pos: GridPos) {
         let src_type = self.get_tile(src_pos);
         self.set_tile(src_pos, TileType::Empty);
-        self.set_moved(src_pos, true);
         self.set_tile(dst_pos, src_type);
-        self.set_moved(dst_pos, true);
 
         if self.player_pos == src_pos {
             assert_eq!(src_type, TileType::Player);
             self.player_pos = dst_pos;
-        }
-    }
-
-    pub fn clean_moved_state(&mut self) {
-        for moved in self.moved.iter_mut() {
-            *moved = false;
         }
     }
 
@@ -247,115 +307,116 @@ impl GridState {
         debug_assert!(self.get_tile(self.player_pos).is_player());
 
         for action in action {
-            let dst_pos = player_pos.direction(action.direction, self.width);
-            let dst_type = self.get_tile(dst_pos);
-            if dst_type.is_empty() {
-                self.move_grid_object(player_pos, dst_pos);
-                break;
-            }
-            if dst_type.is_dirt() {
-                self.move_grid_object(player_pos, dst_pos);
-                break;
-            }
-            if dst_type.is_diamond() {
-                self.move_grid_object(player_pos, dst_pos);
+            let dst = self.get_tile_relative(player_pos, action.direction);
+            if dst.kind.is_diamond() {
                 self.diamond_count += 1;
+            }
+            if dst.kind.can_be_stepped_on() {
+                self.move_grid_object(player_pos, dst.pos);
                 break;
             }
-            if dst_type.can_be_pushed() {
-                let past_dst_pos = dst_pos.direction(action.direction, self.width);
-                let past_dst_type = self.get_tile(past_dst_pos);
-                if past_dst_type.is_empty() {
-                    self.move_grid_object(dst_pos, past_dst_pos);
-                    self.move_grid_object(player_pos, dst_pos);
+            if dst.kind.can_be_pushed() {
+                let past_dst = self.get_tile_relative(dst.pos, action.direction);
+                if past_dst.kind.is_empty() {
+                    self.move_grid_object(dst.pos, past_dst.pos);
+                    self.move_grid_object(player_pos, dst.pos);
                     break;
                 }
             }
         }
     }
 
-    fn move_things_rolling_to_sides(&mut self) {
-        for i in 0..self.tiles.len() {
-            let pos = GridPos(i);
+    fn try_roll(&mut self, current_pos: GridPos) -> Option<GridPos> {
+        let down = self.get_tile_relative(current_pos, Direction::Down);
+        if !down.kind.can_be_rolled_on() {
+            return None;
+        }
 
-            if self.get_moved(pos) {
-                continue;
+        let left = self.get_tile_relative(current_pos, Direction::Left);
+        let down_left = self.get_tile_relative(left.pos, Direction::Down);
+        let right = self.get_tile_relative(current_pos, Direction::Right);
+        let down_right = self.get_tile_relative(right.pos, Direction::Down);
+
+        let left_free = left.kind.is_empty() && down_left.kind.is_empty();
+        let right_free = right.kind.is_empty() && down_right.kind.is_empty();
+
+        match (left_free, right_free) {
+            (true, true) => {
+                let mut rng = thread_rng();
+                let choices = [left.pos, right.pos];
+                Some(choices[rng.gen_range(0, choices.len())])
             }
-            let type_ = self.get_tile(pos);
-
-            if !type_.can_fall() {
-                continue;
-            }
-
-            let pos_below = pos.down(self.width);
-
-            let type_below = self.get_tile(pos_below);
-            if !type_below.can_roll_on_top() {
-                continue;
-            }
-
-            let pos_left = pos.left();
-            let pos_left_down = pos_left.down(self.width);
-            let pos_right = pos.right();
-            let pos_right_down = pos_right.down(self.width);
-            let left_free =
-                self.get_tile(pos_left).is_empty() && self.get_tile(pos_left_down).is_empty();
-            let right_free =
-                self.get_tile(pos_right).is_empty() && self.get_tile(pos_right_down).is_empty();
-
-            if let Some(dst_pos) = match (left_free, right_free) {
-                (true, true) => {
-                    let mut rng = thread_rng();
-                    let choices = [pos_left, pos_right];
-                    Some(choices[rng.gen_range(0, choices.len())])
-                }
-                (true, false) => Some(pos_left),
-                (false, true) => Some(pos_right),
-                (false, false) => None,
-            } {
-                self.move_grid_object_if_unmoved(pos, dst_pos);
-            }
+            (true, false) => Some(left.pos),
+            (false, true) => Some(right.pos),
+            (false, false) => None,
         }
     }
 
-    fn move_things_falling_down(&mut self) {
-        for i in 0..self.tiles.len() {
-            let pos = GridPos(i);
-            let type_ = self.get_tile(pos);
+    fn try_fall(&mut self, current_pos: GridPos) -> Option<GridPos> {
+        let below = self.get_tile_relative(current_pos, Direction::Down);
 
-            if !type_.can_fall() {
-                continue;
-            }
-
-            let pos_below = pos.down(self.width);
-            let type_below = self.get_tile(pos_below);
-            if type_below.is_empty() {
-                self.move_grid_object_if_unmoved(pos, pos_below);
-            }
+        if below.kind.is_empty() {
+            Some(below.pos)
+        } else {
+            None
         }
     }
 
-    pub fn run_tick(&mut self, action: Vec<input::Action>) {
-        self.clean_moved_state();
-        self.move_player(action);
-        self.move_things_rolling_to_sides();
-        self.move_things_falling_down();
+    fn try_creature_move(&mut self, current_pos: GridPos, direction: Direction) -> Option<Tile> {
+        let front = self.get_tile_relative(current_pos, direction);
+        if front.kind.is_empty() {
+            return Some(Tile {
+                pos: front.pos,
+                kind: TileType::Creature {
+                    counter: 0,
+                    direction: direction,
+                },
+            });
+        }
 
-        /*
-            for (object, transform) in (&mut grid_objects, &mut transforms).join() {
-                if !object.moved {
-                    continue;
-                }
+        if !front.kind.can_be_bounced_on() {
+            return None;
+        }
 
-                object.moved = false;
-                transform.set_translation(object.pos.to_translation());
-            }
-            let GridState {
-                ref mut tiles_prev,
-                ref mut tiles,
-                ..
-            } = *self;
-            tiles_prev.copy_from(&tiles);
-        */
+        // randomly pick from any open side, preferring not to switch all the way around
+        let choices = [
+            Direction::Left,
+            Direction::Right,
+            Direction::Up,
+            Direction::Down,
+        ];
+        let filtered: Vec<_> = choices
+            .iter()
+            .filter(|d| {
+                **d != direction.opposite()
+                    && self.get_tile_relative(current_pos, **d).kind == TileType::Empty
+            })
+            .collect();
+
+        if filtered.len() > 0 {
+            let mut rng = thread_rng();
+            let new_direction = *filtered[rng.gen_range(0, filtered.len())];
+            let new_tile = self.get_tile_relative(current_pos, new_direction);
+
+            return Some(Tile {
+                pos: new_tile.pos,
+                kind: TileType::Creature {
+                    counter: 0,
+                    direction: new_direction,
+                },
+            });
+        }
+
+        let opposite = self.get_tile_relative(current_pos, direction.opposite());
+        match opposite.kind {
+            TileType::Empty => Some(Tile {
+                pos: opposite.pos,
+                kind: TileType::Creature {
+                    counter: 0,
+                    direction: direction.opposite(),
+                },
+            }),
+            _ => None,
+        }
     }
 }

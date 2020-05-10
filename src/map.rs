@@ -5,7 +5,10 @@ use std::{
     path::PathBuf,
 };
 
-use crate::grid::{GridPos, TileType};
+use crate::{
+    grid::{GridPos, TileType},
+    input::Direction,
+};
 
 #[derive(Debug, Clone)]
 pub struct MapDescription {
@@ -46,6 +49,10 @@ impl MapDescription {
                     '.' => TileType::Dirt,
                     'o' => TileType::Rock,
                     '*' => TileType::Diamond,
+                    'x' => TileType::Creature {
+                        counter: 0,
+                        direction: Direction::Down,
+                    },
                     _ => TileType::Empty,
                 });
             }

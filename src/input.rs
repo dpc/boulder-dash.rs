@@ -9,6 +9,18 @@ pub enum Direction {
     Right,
 }
 
+impl Direction {
+    pub fn opposite(self) -> Self {
+        use Direction::*;
+        match self {
+            Up => Direction::Down,
+            Down => Direction::Up,
+            Left => Direction::Right,
+            Right => Direction::Left,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Button {
     Move(Direction),

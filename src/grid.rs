@@ -112,6 +112,7 @@ impl TileType {
             _ => false,
         }
     }
+
     fn is_player(self) -> bool {
         use TileType::*;
         match self {
@@ -127,6 +128,7 @@ impl TileType {
             _ => false,
         }
     }
+
     fn is_diamond(self) -> bool {
         use TileType::*;
         match self {
@@ -134,6 +136,7 @@ impl TileType {
             _ => false,
         }
     }
+
     fn can_be_pushed(self) -> bool {
         use TileType::*;
         match self {

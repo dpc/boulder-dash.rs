@@ -1,3 +1,5 @@
+use rand::{thread_rng, Rng};
+
 use crate::{
     input::{self, Direction},
     map::MapDescription,
@@ -302,7 +304,11 @@ impl GridState {
                 self.get_tile(pos_right).is_empty() && self.get_tile(pos_right_down).is_empty();
 
             if let Some(dst_pos) = match (left_free, right_free) {
-                (true, true) => Some(pos_left), // TODO: randomize?
+                (true, true) => {
+                    let mut rng = thread_rng();
+                    let choices = [pos_left, pos_right];
+                    Some(choices[rng.gen_range(0, choices.len())])
+                }
                 (true, false) => Some(pos_left),
                 (false, true) => Some(pos_right),
                 (false, false) => None,

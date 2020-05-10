@@ -192,7 +192,7 @@ impl GridState {
             width,
             tiles,
             start,
-        } = crate::map::MapDescription::load("./resources/map/02.txt".into())
+        } = crate::map::MapDescription::load("./resources/map/01.txt".into())
             .expect("map should load");
 
         GridState {

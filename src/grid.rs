@@ -378,7 +378,6 @@ impl GridState {
             return None;
         }
 
-        // randomly pick from any open side, preferring not to switch all the way around
         let choices = [
             Direction::Left,
             Direction::Right,
@@ -393,9 +392,12 @@ impl GridState {
             })
             .collect();
 
+        // determinstically pick from one of the two possible directions to turn
+        // preferring ones earlier in the choice list above. For example if the 
+        // character has the option to go left or right, it will go left since it is 
+        // earlier in the list.
         if filtered.len() > 0 {
-            let mut rng = thread_rng();
-            let new_direction = *filtered[rng.gen_range(0, filtered.len())];
+            let new_direction = *filtered[0];
             let new_tile = self.get_tile_relative(current_pos, new_direction);
 
             return Some(Tile {

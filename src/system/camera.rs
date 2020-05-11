@@ -89,7 +89,7 @@ impl<'s> System<'s> for CameraSystem {
         &mut self,
         (mut camera, mut transform, time, grid_map_state, screen_dimensions, zoom_level): Self::SystemData,
     ) {
-        let screen_dimensions = screen_dimensions.as_ref().expect("screen dimmensions set");
+        let screen_dimensions = screen_dimensions.as_ref().expect("screen dimensions set");
 
         let screen_w = screen_dimensions.width();
         let screen_h = screen_dimensions.height();
